@@ -9,6 +9,7 @@ import 'package:simple_utils/simple_utils.dart';
 import '../simple_form.dart';
 import 'country_repository.dart';
 import 'dropdown_button.dart';
+import 'entities.dart';
 import 'formatters.dart';
 import 'text_field_builder.dart';
 
@@ -586,7 +587,7 @@ class SimpleField<T> extends FormField<T> {
         },
       );
 
-  /// TODO : Try to implement autofill
+  ///
   static SimpleField<DateTime> date({
     String? jsonKey,
     AutovalidateMode? autovalidateMode,
@@ -596,25 +597,18 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    ValueCtrl<DateTime>? controller,
+    TFCtrl<DateTime>? controller,
     ValueChanged<DateTime?>? onChanged,
     Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<DateTime>? onSaved,
     bool enabled = true,
+    bool editable = false,
     String? restorationId,
-    (DateTime min, DateTime max)? range,
-    DatePickerEntryMode initialEntryMode = DatePickerEntryMode.calendar,
-    SelectableDayPredicate? selectableDayPredicate,
-    String? helpText,
-    String? cancelText,
-    String? confirmText,
-    String? errorFormatText,
-    String? errorInvalidText,
-    String? fieldHintText,
-    String? fieldLabelText,
-    TextInputType? keyboardType,
-    DateFormat? dateFormat,
+    List<TextInputFormatter>? inputFormatters,
+    Iterable<String>? autofillHints,
+    DateType? type,
+    SimpleDatePicker? picker,
     Key? key,
   }) =>
       SimpleField<DateTime>(
@@ -626,7 +620,7 @@ class SimpleField<T> extends FormField<T> {
         initialValue: initialValue,
         isRequired: isRequired,
         labelText: labelText,
-        hintText: hintText,
+        hintText: hintText ?? type?.format,
         listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
@@ -636,46 +630,52 @@ class SimpleField<T> extends FormField<T> {
             (value) => isRequired && value == null ? 'Required field' : null,
         key: key,
         builder: (context, field) {
-          final decor = DefaultInputDecoration.of(context);
-          return FieldFocus(
-            isEmpty: field.value == null,
-            enabled: enabled ? listenables.hasValue : enabled,
-            onPressed: () async {
-              final dateTime = await showDatePicker(
-                context: context,
-                initialDate: DateTime.now(),
-                firstDate: range?.$1 ??
-                    DateTime.now().subtract(const Duration(days: 80 * 365)),
-                lastDate: range?.$2 ?? DateTime.now(),
-                currentDate: initialValue,
-                selectableDayPredicate: selectableDayPredicate,
-                helpText: helpText,
-                cancelText: cancelText,
-                confirmText: confirmText,
-                initialEntryMode: initialEntryMode,
-                errorFormatText: errorFormatText,
-                errorInvalidText: errorInvalidText,
-                fieldHintText: fieldHintText,
-                fieldLabelText: fieldLabelText,
-                keyboardType: keyboardType,
-              );
+          final datePicker = picker ?? SimpleDatePicker();
+          final dateType = type ?? DateType.other();
 
-              if (dateTime != null) {
+          void onChangedHandler(String value) {
+            field.didChange(DateTime.tryParse(value));
+            onChanged?.call(field.value);
+          }
+
+          return TextFieldBuilder(
+            ctrl: controller,
+            initialValue: initialValue,
+            builder: (ctrl) {
+              Future<void> onPressed() async {
+                final dateTime = await datePicker.open(context);
+                if (dateTime == null) return;
                 field.didChange(dateTime);
+                ctrl.text = datePicker.formatted(dateTime);
               }
+
+              return TextField(
+                controller: ctrl,
+                onChanged: onChangedHandler,
+                restorationId: restorationId,
+                decoration: DefaultInputDecoration.of(context).copyWith(
+                  suffixIcon: InkWell(
+                    onTap: onPressed,
+                    child: const SizedBox.square(
+                      dimension: 32,
+                      child: Icon(Icons.calendar_month_rounded),
+                    ),
+                  ),
+                ),
+                autofillHints: [
+                  ...dateType.autofillHints,
+                  ...?autofillHints,
+                ],
+                keyboardType: TextInputType.datetime,
+                inputFormatters: [
+                  FilteringTextInputFormatter.singleLineFormatter,
+                  ...dateType.inputFormatters,
+                  ...?inputFormatters,
+                ],
+                readOnly: !editable,
+                onTap: editable ? null : onPressed,
+              );
             },
-            decoration: decor.copyWith(
-              suffixIcon: field.value != null
-                  ? InkWell(
-                      canRequestFocus: false,
-                      onTap: () => field.didChange(null),
-                      radius: 24,
-                      borderRadius: BorderRadius.circular(24),
-                      child: const Icon(Icons.clear),
-                    )
-                  : const Icon(Icons.calendar_month_rounded),
-            ),
-            child: Text(field.value?.formatted(dateFormat) ?? ''),
           );
         },
       );
@@ -1092,13 +1092,6 @@ extension on OutlineInputBorder {
 
 extension on FloatingLabelBehavior {
   bool get canFloat => this != FloatingLabelBehavior.never;
-}
-
-extension on DateTime {
-  String formatted(DateFormat? dateFormat) {
-    final formatter = dateFormat ?? DateFormat('yyyy-MM-dd');
-    return formatter.format(this);
-  }
 }
 
 ///
