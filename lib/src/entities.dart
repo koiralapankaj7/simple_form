@@ -11,10 +11,14 @@ sealed class DateType {
   DateType({
     List<TextInputFormatter>? inputFormatters,
     Iterable<String>? autofillHints,
-    this.format = 'dd/mm/yyyy',
-  })  : inputFormatters =
-            inputFormatters ?? [DateInputFormatter(format: format)],
-        autofillHints = autofillHints ?? [];
+    String? format,
+  })  : formatter = DateInputFormatter(format: format),
+        autofillHints = autofillHints ?? [] {
+    this.inputFormatters = [
+      formatter,
+      ...?inputFormatters,
+    ];
+  }
 
   ///
   factory DateType.birthDate({String format}) = BirthDate;
@@ -25,28 +29,27 @@ sealed class DateType {
   ///
   factory DateType.other({String format}) = OtherDate;
 
-  final List<TextInputFormatter> inputFormatters;
+  ///
+  late final List<TextInputFormatter> inputFormatters;
+
+  ///
   final Iterable<String> autofillHints;
-  final String format;
+
+  ///
+  final DateInputFormatter formatter;
 }
 
 ///
 class CardExpiryDate extends DateType {
-  CardExpiryDate({
-    super.format = 'mm/yy',
-  }) : super(
-          inputFormatters: const [ExpiryDateInputFormatter()],
+  CardExpiryDate({super.format = 'MM/YY'})
+      : super(
           autofillHints: [AutofillHints.creditCardExpirationDate],
         );
 }
 
 ///
 class BirthDate extends DateType {
-  BirthDate({
-    super.format,
-  }) : super(
-          autofillHints: [AutofillHints.birthday],
-        );
+  BirthDate({super.format}) : super(autofillHints: [AutofillHints.birthday]);
 }
 
 ///
@@ -121,12 +124,6 @@ class SimpleDatePicker {
   final Icon? switchToCalendarEntryModeIcon;
   final su.DateFormat? dateFormat;
   final DateType? type;
-
-  ///
-  String formatted(DateTime date) {
-    final formatter = dateFormat ?? su.DateFormat('yyyy-MM-dd');
-    return formatter.format(date);
-  }
 
   ///
   Future<DateTime?> open(BuildContext context) async {

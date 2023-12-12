@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:simple_utils/simple_utils.dart';
 
 ///
 typedef ValueRange = (num min, num max);
@@ -31,98 +32,207 @@ class RangeLimitingTextInputFormatter extends TextInputFormatter {
 }
 
 ///
-class DateString {
-  ///
-  DateString(this.key, this.text, this.delimiter);
+const defaultDateFormat = 'dd/MM/yyyy';
 
-  ///
-  final String key;
+///
+class _DateValue {
+  _DateValue({
+    required this.symbol,
+    required this.delimiter,
+  });
 
-  ///
-  final String text;
+  final String symbol;
+  final String delimiter;
 
-  ///
-  final String? delimiter;
+  /// Actual date value
+  String _value = '';
 
-  ///
-  int get length => text.length + (delimiter != null ? 1 : 0);
-}
-
-/// DD/MM/YYYY
-class DateInputFormatter extends TextInputFormatter {
-  ///
-  DateInputFormatter({
-    this.format = 'dd/mm/yyyy',
-  }) {
-    _init();
+  void _setVal(String value) {
+    if (value == _value) return;
+    _value = value;
   }
 
   ///
-  final String format;
+  String get format => '${symbol.casedFromBase}$delimiter';
 
-  final _items = <DateString>[];
+  int get length => symbol.length + delimiter.length;
 
-  String _convert(String string, bool delete) {
+  bool get isValid => _value.length == symbol.length;
+}
+
+///
+///     Symbol    Meaning                Presentation       Example
+///     ------    -------                ------------       -------
+///     yy        year                   (Number)           1996
+///     Mm        month in year          (Number)           07
+///     dd        day in month           (Number)           10
+///     hH        hour in day (0~23)     (Number)           0
+///     mM        minute in hour         (Number)           30
+///     ss        second in minute       (Number)           55
+///
+/// yyyy-MM-ddTHH:mm:ss, this will be the converted format
+///
+/// `M` and `m` is case sensitive, uppercase refers to Month and lowercase
+/// refers to minute
+class DateInputFormatter extends TextInputFormatter {
+  ///
+  DateInputFormatter({String? format}) {
+    _map = _processFormat(format ?? defaultDateFormat);
+  }
+
+  // late final List<_DateValue> _items;
+  late final Map<String, _DateValue> _map;
+
+  ///
+  late final String format =
+      _map.entries.fold('', (pv, e) => '$pv${e.value.format}');
+
+  ///
+  late final _strLength = _map.values.fold(0, (pv, e) => pv + e.length);
+
+  /// Get [DateTime] from the current state
+  DateTime? get dateTime {
+    try {
+      var year = 0;
+      var month = 1;
+      var day = 1;
+      var hour = 0;
+      var minute = 0;
+      var second = 0;
+
+      if (_map['y'] ?? _map['Y'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        year = dateField._value.toYear;
+      }
+
+      if (_map['M'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        month = int.parse(dateField._value);
+      }
+
+      if (_map['d'] ?? _map['D'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        day = int.parse(dateField._value);
+      }
+
+      if (_map['h'] ?? _map['H'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        hour = int.parse(dateField._value);
+      }
+
+      if (_map['m'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        minute = int.parse(dateField._value);
+      }
+
+      if (_map['s'] ?? _map['S'] case final _DateValue dateField) {
+        if (!dateField.isValid) return null;
+        second = int.parse(dateField._value);
+      }
+
+      return DateTime(year, month, day, hour, minute, second);
+    } catch (e) {
+      // In case of parsing errors
+      return null;
+    }
+  }
+
+  /// Convert [dateTime] to current [format]
+  String dateString(DateTime dateTime) {
     final strBuffer = StringBuffer();
-    var start = 0;
-    for (final item in _items) {
-      final end = item.text.length + start;
-
-      if (string.length < end) {
-        strBuffer.write(string.substring(start));
-        return strBuffer.toString();
-      }
-
-      if (string.length == end && delete) {
-        strBuffer.write(string.substring(start, end));
-        return strBuffer.toString();
-      }
-
-      if (string.length >= end) {
-        strBuffer.write(string.substring(start, end));
-        if (item.delimiter != null) {
-          strBuffer.write(item.delimiter);
-        }
-        start = end;
+    for (final MapEntry(:key, :value) in _map.entries) {
+      final dateValue = switch (key) {
+        'y' => dateTime.year,
+        'M' => dateTime.month,
+        'd' => dateTime.day,
+        'h' => dateTime.hour,
+        'm' => dateTime.minute,
+        's' => dateTime.second,
+        _ => null,
+      };
+      if (dateValue != null) {
+        strBuffer.write('$dateValue${value.delimiter}');
       }
     }
     return strBuffer.toString();
   }
 
-  void _init() {
-    final regExp = RegExp('([A-Za-z]+)([^A-Za-z]?)');
-    final matches = regExp.allMatches(format);
-    for (final match in matches) {
+  ///
+  Map<String, _DateValue> _processFormat(String format) {
+    final regExp = RegExp(
+      r'\b(y{1,4}|M{1,2}|d{1,2}|H{1,2}|m{1,2}|s{1,2})(\W?)\b',
+      caseSensitive: false,
+    );
+    final matches = regExp.allMatches(format.replaceFirst('T', ' '));
+    final map = <String, _DateValue>{};
+    for (final (index, match) in matches.indexed) {
       final text = match.group(1);
-      if (text?.isEmpty ?? true) continue;
-      final key = text!.toLowerCase().split('').toSet();
-      if (key.length == 1) {
-        _items.add(DateString(key.first, text, match.group(2)));
+      if (text != null && !text.containsSameChar) continue;
+      final key = text![0];
+      if (map.containsKey(key)) {
+        map.remove(key);
       }
+      map[key] = _DateValue(
+        symbol: text,
+        delimiter: index == matches.length - 1 ? '' : match.group(2) ?? '',
+      );
     }
-
-    // // Assign default format if it is invalid
-    // if (_items.length < 2 ||
-    //     _items.firstWhereOrNull((e) => e.key == 'y') == null) {
-    //   _items = _defaultDate;
-    // }
+    return map;
   }
 
-  late final _strLength = _items.fold(0, (pv, e) => pv + e.length);
+  /// Converts the input string to the specified format.
+  ///
+  /// [value] - The input string to format.
+  /// [delete] - A flag indicating whether the last action was a deletion.
+  String _convert(String value, bool delete) {
+    // Remove non-numeric characters and format the new text
+    final string = value.replaceAll(RegExp('[^0-9]'), '');
+    final buffer = StringBuffer();
+    var start = 0;
+
+    for (final item in _map.values) {
+      final end = start + item.symbol.length;
+
+      // Append the substring of the input that corresponds
+      // to the current format component
+      if (string.length < end) {
+        final val = string.substring(start);
+        buffer.write(val);
+        item._setVal(val);
+        break;
+      }
+
+      final val = string.substring(start, end);
+      buffer.write(val);
+      item._setVal(val);
+      // Append the delimiter if not deleting or
+      // if the string is longer than the current component
+      if (!delete || string.length > end) {
+        buffer.write(item.delimiter);
+      }
+
+      start = end;
+    }
+    return buffer.toString();
+  }
 
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    final length = newValue.text.length;
-    if (length > _strLength) return oldValue;
+    // final length = newValue.text.length;
+    // if (length > _strLength) return oldValue;
 
-    // Support 0-9
-    var newText = newValue.text.replaceAll(RegExp('[^0-9]'), '');
+    // Prevents the formatted text from exceeding the defined format length
+    if (oldValue.text.isNotEmpty && newValue.text.length > _strLength) {
+      return oldValue;
+    }
 
-    newText = _convert(newText, oldValue.text.length > newValue.text.length);
-
+    final newText = _convert(
+      newValue.text,
+      oldValue.text.length > newValue.text.length,
+    );
     return TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(offset: newText.length),

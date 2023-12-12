@@ -620,22 +620,29 @@ class SimpleField<T> extends FormField<T> {
         initialValue: initialValue,
         isRequired: isRequired,
         labelText: labelText,
-        hintText: hintText ?? type?.format,
+        hintText: hintText ?? type?.formatter.format,
         listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
         onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator ??
-            (value) => isRequired && value == null ? 'Required field' : null,
+            (value) {
+              return isRequired && value == null ? 'Required field' : null;
+            },
         key: key,
         builder: (context, field) {
           final datePicker = picker ?? SimpleDatePicker();
           final dateType = type ?? DateType.other();
 
           void onChangedHandler(String value) {
-            field.didChange(DateTime.tryParse(value));
-            onChanged?.call(field.value);
+            final date = dateType.formatter.dateTime;
+            if (date == null) {
+              // field.validate();
+              // field.errorText = 'Invalid Error';
+            } else {
+              field.didChange(date);
+            }
           }
 
           return TextFieldBuilder(
@@ -646,7 +653,8 @@ class SimpleField<T> extends FormField<T> {
                 final dateTime = await datePicker.open(context);
                 if (dateTime == null) return;
                 field.didChange(dateTime);
-                ctrl.text = datePicker.formatted(dateTime);
+                ctrl.text = datePicker.dateFormat?.format(dateTime) ??
+                    dateType.formatter.dateString(dateTime);
               }
 
               return TextField(
@@ -882,7 +890,7 @@ class SimpleFieldState<T> extends FormFieldState<T> {
 
   @override
   void didChange(T? value) {
-    if (this.value == value) return;
+    // if (this.value == value) return;
     super.didChange(value);
     if (errorText != null && value != null) {
       validate();
