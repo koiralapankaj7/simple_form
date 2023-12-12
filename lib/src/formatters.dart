@@ -141,19 +141,24 @@ class DateInputFormatter extends TextInputFormatter {
   String dateString(DateTime dateTime) {
     final strBuffer = StringBuffer();
     for (final MapEntry(:key, :value) in _map.entries) {
-      final dateValue = switch (key) {
-        'y' => dateTime.year,
+      final dynamic dateValue = switch (key) {
+        'y' || 'Y' => () {
+            final year = '${dateTime.year}';
+            return year.substring(year.length - value.symbol.length);
+          }(),
         'M' => dateTime.month,
-        'd' => dateTime.day,
-        'h' => dateTime.hour,
+        'd' || 'D' => dateTime.day,
+        'h' || 'H' => dateTime.hour,
         'm' => dateTime.minute,
-        's' => dateTime.second,
+        's' || 'S' => dateTime.second,
         _ => null,
       };
+
       if (dateValue != null) {
         strBuffer.write('$dateValue${value.delimiter}');
       }
     }
+
     return strBuffer.toString();
   }
 
