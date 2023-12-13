@@ -81,13 +81,17 @@ class SimpleFormState extends FormState {
 
   SimpleForm get _widget => widget as SimpleForm;
 
-  void _register(SimpleFieldState<dynamic>? field) {
-    if (field == null) return;
+  void _register(SimpleFieldState<dynamic> field) {
+    if (_widget.initialJson.isNotEmpty && field._widget.jsonKey != null) {
+      final value = _widget.initialJson[field._widget.jsonKey];
+      WidgetsBinding.instance.endOfFrame.then((_) {
+        field.didChange(value);
+      });
+    }
     _fields.add(field);
   }
 
-  void _unregister(SimpleFieldState<dynamic>? field) {
-    if (field == null) return;
+  void _unregister(SimpleFieldState<dynamic> field) {
     if (_widget.autoDispose) {
       field._widget.controller?.dispose();
     }
@@ -97,7 +101,7 @@ class SimpleFormState extends FormState {
   ///
   Map<String, dynamic> get json => {
         for (final field in _fields)
-          if (field.hasEntry) field.key: field.value,
+          if (field.hasEntry) field.key: field.entry.value,
       };
 
   @override
@@ -133,6 +137,9 @@ typedef SimpleFieldStateBuilder<T> = Widget Function(
 );
 
 ///
+typedef JsonValueParser<T> = dynamic Function(T? value);
+
+///
 class SimpleField<T> extends FormField<T> {
   ///
   SimpleField({
@@ -146,6 +153,7 @@ class SimpleField<T> extends FormField<T> {
     super.restorationId,
     super.key,
     this.jsonKey,
+    this.jsonValueParser,
     this.decoration,
     this.labelText,
     this.hintText,
@@ -171,6 +179,9 @@ class SimpleField<T> extends FormField<T> {
 
   ///
   final String? jsonKey;
+
+  ///
+  final JsonValueParser<T>? jsonValueParser;
 
   ///
   final InputDecoration? decoration;
@@ -211,6 +222,7 @@ class SimpleField<T> extends FormField<T> {
     bool enabled = true,
     String? restorationId,
     Iterable<String>? autofillHints,
+    List<TextInputFormatter>? inputFormatters,
     Key? key,
   }) =>
       SimpleField<String>(
@@ -244,6 +256,7 @@ class SimpleField<T> extends FormField<T> {
                 restorationId: restorationId,
                 decoration: DefaultInputDecoration.of(context),
                 autofillHints: autofillHints,
+                inputFormatters: inputFormatters,
               );
             },
           );
@@ -255,6 +268,7 @@ class SimpleField<T> extends FormField<T> {
   ///
   static SimpleField<Country> country({
     String? jsonKey,
+    JsonValueParser<Country>? jsonValueParser,
     AutovalidateMode? autovalidateMode,
     Country? initialValue,
     FormFieldValidator<Country>? validator,
@@ -273,6 +287,7 @@ class SimpleField<T> extends FormField<T> {
   }) =>
       SimpleField<Country>(
         jsonKey: jsonKey,
+        jsonValueParser: jsonValueParser,
         autovalidateMode: autovalidateMode,
         controller: controller,
         enabled: enabled,
@@ -452,6 +467,7 @@ class SimpleField<T> extends FormField<T> {
   ///
   static SimpleField<int> number({
     String? jsonKey,
+    JsonValueParser<int>? jsonValueParser,
     AutovalidateMode? autovalidateMode,
     int? initialValue,
     FormFieldValidator<int>? validator,
@@ -471,6 +487,7 @@ class SimpleField<T> extends FormField<T> {
   }) =>
       SimpleField<int>(
         jsonKey: jsonKey,
+        jsonValueParser: jsonValueParser,
         autovalidateMode: autovalidateMode,
         controller: controller,
         decoration: decoration,
@@ -587,9 +604,10 @@ class SimpleField<T> extends FormField<T> {
         },
       );
 
-  ///
+  /// TODO : 1. add time support, picked date into single char format and vice versa
   static SimpleField<DateTime> date({
     String? jsonKey,
+    JsonValueParser<DateTime>? jsonValueParser,
     AutovalidateMode? autovalidateMode,
     DateTime? initialValue,
     FormFieldValidator<DateTime>? validator,
@@ -613,6 +631,7 @@ class SimpleField<T> extends FormField<T> {
   }) =>
       SimpleField<DateTime>(
         jsonKey: jsonKey,
+        jsonValueParser: jsonValueParser,
         autovalidateMode: autovalidateMode,
         controller: controller,
         decoration: decoration,
@@ -682,6 +701,73 @@ class SimpleField<T> extends FormField<T> {
                 ],
                 readOnly: !editable,
                 onTap: editable ? null : onPressed,
+              );
+            },
+          );
+        },
+      );
+
+  ///
+  static SimpleField<String> cardNo({
+    String? jsonKey,
+    AutovalidateMode? autovalidateMode,
+    String? initialValue,
+    FormFieldValidator<String>? validator,
+    bool isRequired = false,
+    String? labelText,
+    String? hintText,
+    InputDecoration? decoration,
+    StringTFCtrl? controller,
+    ValueChanged<String?>? onChanged,
+    Iterable<ValueListenable<dynamic>> listenables = const [],
+    ValueChanged<Listenable>? onListenableChanged,
+    FormFieldSetter<String>? onSaved,
+    bool enabled = true,
+    String? restorationId,
+    int length = 16,
+    int chunkSize = 4,
+    String separator = ' ',
+    Key? key,
+  }) =>
+      SimpleField<String>(
+        jsonKey: jsonKey,
+        autovalidateMode: autovalidateMode,
+        controller: controller,
+        enabled: enabled,
+        initialValue: initialValue,
+        isRequired: isRequired,
+        labelText: labelText,
+        hintText: hintText,
+        listenables: listenables,
+        onChanged: onChanged,
+        onSaved: onSaved,
+        onListenableChanged: onListenableChanged,
+        restorationId: restorationId,
+        validator: validator,
+        key: key,
+        builder: (context, field) {
+          void onChangedHandler(String value) {
+            field.didChange(value.replaceAll(separator, ''));
+          }
+
+          return TextFieldBuilder(
+            ctrl: controller,
+            initialValue: initialValue,
+            builder: (ctrl) {
+              return TextField(
+                onChanged: onChangedHandler,
+                restorationId: restorationId,
+                decoration: DefaultInputDecoration.of(context),
+                keyboardType: TextInputType.number,
+                scrollPadding: const EdgeInsets.symmetric(vertical: 100),
+                autofillHints: const [AutofillHints.creditCardNumber],
+                inputFormatters: [
+                  CreditCardNumberInputFormatter(
+                    length: length,
+                    chunkSize: chunkSize,
+                    separator: separator,
+                  ),
+                ],
               );
             },
           );
@@ -862,10 +948,13 @@ class SimpleFieldState<T> extends FormFieldState<T> {
   String get key => keyOrNull!;
 
   ///
-  MapEntry<String, T>? get entryOrNull => hasEntry ? entry : null;
+  MapEntry<String, dynamic>? get entryOrNull => hasEntry ? entry : null;
 
   ///
-  MapEntry<String, T> get entry => MapEntry(key, value as T);
+  MapEntry<String, dynamic> get entry => MapEntry(
+        key,
+        _widget.jsonValueParser?.call(value) ?? value,
+      );
 
   @override
   void initState() {

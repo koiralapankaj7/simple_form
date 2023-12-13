@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_form/src/formatters.dart';
 
@@ -39,8 +40,6 @@ void main() {
   });
 
   group('DateInputFormatter Tests', () {
-    // Test for standard date format: dd/mm/yyyy
-
     // 'format' : (input,output, DateTime)
     final formats = {
       'dd/MM/yyyyTHH:mm:ss': (
@@ -160,6 +159,98 @@ void main() {
       const oldValue = TextEditingValue(text: '23/06/2022');
       const newValue = TextEditingValue(text: '23/06/202');
       expect(formatter.formatEditUpdate(oldValue, newValue).text, '23/06/202');
+    });
+  });
+
+  group('CreditCardNumberInputFormatter Tests', () {
+    const formatter = CreditCardNumberInputFormatter();
+
+    test('Formats simple credit card number', () {
+      const oldValue = TextEditingValue.empty;
+      const newValue = TextEditingValue(text: '1234567890123456');
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+      expect(result.text, equals('1234 5678 9012 3456'));
+    });
+
+    test('Respects maximum length', () {
+      const oldValue = TextEditingValue(text: '1234 5678 9012 3456');
+      const newValue = TextEditingValue(text: '1234 5678 9012 34567');
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('1234 5678 9012 3456'));
+    });
+
+    test('Inserting digit in the middle', () {
+      const oldValue = TextEditingValue(
+        text: '1234 567 8901 2345',
+        selection: TextSelection.collapsed(offset: 8),
+      );
+      const newValue = TextEditingValue(
+        text: '1234 5678 8901 2345',
+        selection: TextSelection.collapsed(offset: 9),
+      );
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('1234 5678 8901 2345'));
+      expect(result.selection.end, equals(9));
+    });
+
+    test('Deleting digit in the middle', () {
+      const oldValue = TextEditingValue(
+        text: '1234 5678 8901 2345',
+        selection: TextSelection.collapsed(offset: 9),
+      );
+      const newValue = TextEditingValue(
+        text: '1234 567 8901 2345',
+        selection: TextSelection.collapsed(offset: 8),
+      );
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('1234 5678 9012 345'));
+      expect(result.selection.end, equals(8));
+    });
+
+    test(
+        'Formats credit card number with custom length, chunk size, and separator',
+        () {
+      const formatter = CreditCardNumberInputFormatter(
+        length: 18,
+        chunkSize: 3,
+        separator: '-',
+      );
+
+      const oldValue = TextEditingValue.empty;
+      const newValue = TextEditingValue(text: '123456789012345678');
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('123-456-789-012-345-678'));
+    });
+
+    test('Handles shorter length and different separator', () {
+      const formatter = CreditCardNumberInputFormatter(
+        length: 12,
+        separator: '.',
+      );
+
+      const oldValue = TextEditingValue.empty;
+      const newValue = TextEditingValue(text: '123456789012');
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('1234.5678.9012'));
+    });
+
+    test('Handles no separator and different chunk size', () {
+      const formatter = CreditCardNumberInputFormatter(
+        length: 14,
+        chunkSize: 2,
+        separator: '',
+      );
+
+      const oldValue = TextEditingValue.empty;
+      const newValue = TextEditingValue(text: '12345678901234');
+      final result = formatter.formatEditUpdate(oldValue, newValue);
+
+      expect(result.text, equals('12345678901234')); // No separator
     });
   });
 }

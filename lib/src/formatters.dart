@@ -246,26 +246,108 @@ class DateInputFormatter extends TextInputFormatter {
 }
 
 ///
-class ExpiryDateInputFormatter extends TextInputFormatter {
+class CreditCardNumberInputFormatter extends TextInputFormatter {
   ///
-  const ExpiryDateInputFormatter();
+  const CreditCardNumberInputFormatter({
+    this.length = 16,
+    this.chunkSize = 4,
+    this.separator = ' ',
+  });
+
+  /// Length of the card number, default to 16
+  final int length;
+
+  /// Number chunk size to add [separator], default to 4
+  final int chunkSize;
+
+  /// Character to use as a separator between formatted value
+  final String separator;
+
+  int _calculateMaxLength() {
+    // Calculates the total length accounting for separators
+    return length + (separator.isEmpty ? 0 : (length / chunkSize).ceil() - 1);
+  }
+
+  String _formatDigits(String text) {
+    // Remove any existing formatting characters
+    final digits = text.replaceAll(RegExp(r'\D'), '');
+    // Chunk the string and join with separator
+    final chunks = digits.chunks(chunkSize);
+    return chunks.join(separator);
+  }
 
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.length > 7) return oldValue;
+    final maxLength = _calculateMaxLength();
 
-    var newText = newValue.text.replaceAll(RegExp('[^0-9]'), '');
+    if (newValue.text.length > maxLength) return oldValue;
 
-    if (newText.length > 2) {
-      newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
-    }
+    final formatted = _formatDigits(newValue.text);
+
+    // Calculate new cursor position
+    final cursorIndex = newValue.selection.end;
+    final offset = cursorIndex == formatted.length
+        ? formatted.length
+        : _calculateOffset(newValue.text, formatted, cursorIndex);
+
+    print(offset);
 
     return TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: newText.length),
+      text: formatted,
+      selection: TextSelection.collapsed(offset: offset),
     );
   }
+
+//
+  int _calculateOffset(
+    String original,
+    String formatted,
+    int originalCursorPos,
+  ) {
+    if (originalCursorPos <= 0) {
+      // Cursor at the start
+      return 0;
+    }
+
+    final nonDigitsBeforeCursor = RegExp(r'\D')
+        .allMatches(original.substring(0, originalCursorPos))
+        .length;
+    var newCursorPos = originalCursorPos - nonDigitsBeforeCursor;
+
+    for (var i = 0; i < newCursorPos && i < formatted.length; i++) {
+      if (formatted[i] == separator) {
+        newCursorPos++;
+      }
+    }
+
+    return newCursorPos;
+  }
 }
+
+// ///
+// class ExpiryDateInputFormatter extends TextInputFormatter {
+//   ///
+//   const ExpiryDateInputFormatter();
+
+//   @override
+//   TextEditingValue formatEditUpdate(
+//     TextEditingValue oldValue,
+//     TextEditingValue newValue,
+//   ) {
+//     if (newValue.text.length > 7) return oldValue;
+
+//     var newText = newValue.text.replaceAll(RegExp('[^0-9]'), '');
+
+//     if (newText.length > 2) {
+//       newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
+//     }
+
+//     return TextEditingValue(
+//       text: newText,
+//       selection: TextSelection.collapsed(offset: newText.length),
+//     );
+//   }
+// }

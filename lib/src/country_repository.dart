@@ -72,6 +72,14 @@ class Country extends Equatable {
   });
 
   ///
+  const Country.fromName(String name)
+      : this(
+          name: name,
+          unicodeFlag: '',
+          iso2: '',
+        );
+
+  ///
   factory Country.fromJson(Map<String, dynamic> map) {
     return Country(
       name: map['name'] as String,
