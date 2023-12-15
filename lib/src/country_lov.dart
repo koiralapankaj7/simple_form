@@ -30,7 +30,7 @@ class CountryLov extends StatefulWidget {
 }
 
 class _CountryLovState extends State<CountryLov> {
-  late final _repo = widget.repository ?? CountryRepository();
+  late final _repo = widget.repository ?? CountryRepository.instance;
   late final _debouncer = Debouncer(const Duration(milliseconds: 200));
 
   @override

@@ -2,59 +2,46 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:simple_utils/simple_utils.dart' as su;
 
 import '../simple_form.dart';
 
 sealed class DateType {
   DateType({
-    List<TextInputFormatter>? inputFormatters,
-    Iterable<String>? autofillHints,
     String? format,
-  })  : formatter = DateInputFormatter(format: format),
-        autofillHints = autofillHints ?? [] {
-    this.inputFormatters = [
-      formatter,
-      ...?inputFormatters,
-    ];
-  }
+    this.autofillHint,
+  }) : formatter = DateInputFormatter(format: format);
 
   ///
-  factory DateType.birthDate({String format}) = BirthDate;
+  factory DateType.birthDate({String format}) = _BirthDate;
 
   ///
-  factory DateType.cardExpiryDate({String format}) = CardExpiryDate;
+  factory DateType.cardExpiryDate({String format}) = _CardExpiryDate;
 
   ///
-  factory DateType.other({String format}) = OtherDate;
+  factory DateType.none({String format}) = _None;
 
   ///
-  late final List<TextInputFormatter> inputFormatters;
-
-  ///
-  final Iterable<String> autofillHints;
+  final String? autofillHint;
 
   ///
   final DateInputFormatter formatter;
 }
 
 ///
-class CardExpiryDate extends DateType {
-  CardExpiryDate({super.format = 'MM/YY'})
-      : super(
-          autofillHints: [AutofillHints.creditCardExpirationDate],
-        );
+class _CardExpiryDate extends DateType {
+  _CardExpiryDate({super.format = 'MM/yy'})
+      : super(autofillHint: AutofillHints.creditCardExpirationDate);
 }
 
 ///
-class BirthDate extends DateType {
-  BirthDate({super.format}) : super(autofillHints: [AutofillHints.birthday]);
+class _BirthDate extends DateType {
+  _BirthDate({super.format}) : super(autofillHint: AutofillHints.birthday);
 }
 
 ///
-class OtherDate extends DateType {
-  OtherDate({super.format});
+class _None extends DateType {
+  _None({super.format});
 }
 
 ///
@@ -89,7 +76,6 @@ class SimpleDatePicker {
     this.switchToInputEntryModeIcon,
     this.switchToCalendarEntryModeIcon,
     this.dateFormat,
-    this.type,
   })  : firstDate = firstDate ??
             DateTime.now().subtract(const Duration(days: 80 * 365)),
         lastDate =
@@ -123,7 +109,6 @@ class SimpleDatePicker {
   final Icon? switchToInputEntryModeIcon;
   final Icon? switchToCalendarEntryModeIcon;
   final su.DateFormat? dateFormat;
-  final DateType? type;
 
   ///
   Future<DateTime?> open(BuildContext context) async {

@@ -7,9 +7,13 @@ import 'package:simple_utils/simple_utils.dart';
 ///
 class CountryRepository extends BaseChangeNotifier {
   ///
-  CountryRepository() {
-    _getCountries();
-  }
+  CountryRepository._();
+
+  ///
+  static final CountryRepository _instance = CountryRepository._();
+
+  ///
+  static CountryRepository instance = _instance;
 
   List<Country> _countries = [];
   String _search = '';
@@ -26,7 +30,7 @@ class CountryRepository extends BaseChangeNotifier {
           .toList();
 
   ///
-  Future<void> _getCountries() async {
+  Future<void> loadCountries() async {
     try {
       final response = await rootBundle
           .loadString('packages/simple_form/json/countries.json');
@@ -44,7 +48,8 @@ class CountryRepository extends BaseChangeNotifier {
   }
 
   ///
-  Country? countryFrom(String code) {
+  Country? countryFrom(String? code) {
+    if (code == null) return null;
     final term = code.toLowerCase();
     return _countries.firstWhereOrNull(
       (e) => e.name.toLowerCase() == term || e.iso2.toLowerCase() == term,
@@ -70,14 +75,6 @@ class Country extends Equatable {
     this.currency,
     this.flag,
   });
-
-  ///
-  const Country.fromName(String name)
-      : this(
-          name: name,
-          unicodeFlag: '',
-          iso2: '',
-        );
 
   ///
   factory Country.fromJson(Map<String, dynamic> map) {

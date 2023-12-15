@@ -5,30 +5,66 @@ import 'package:simple_utils/simple_utils.dart';
 typedef ValueRange = (num min, num max);
 
 ///
-class RangeLimitingTextInputFormatter extends TextInputFormatter {
-  ///
-  const RangeLimitingTextInputFormatter({
-    required this.range,
-  });
+abstract class SimpleInputFormatter {
+  /// Length limiting input formatter which will only accept value for
+  /// given [size]
+  // static TextInputFormatter length(int size) => TextInputFormatter.withFunction(
+  //       (oldValue, newValue) =>
+  //           newValue.text.length <= size ? newValue : oldValue,
+  //     );
+  static TextInputFormatter enforcedLength(int size) =>
+      LengthLimitingTextInputFormatter(
+        size,
+        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+      );
 
   ///
-  final ValueRange range;
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final enteredValue = num.tryParse(newValue.text);
-    if (enteredValue != null) {
-      if (enteredValue < range.$1 || enteredValue > range.$2) {
-        // Value is outside the desired range; return the old value.
+  static TextInputFormatter enforcedRange(ValueRange range) {
+    return TextInputFormatter.withFunction((oldValue, newValue) {
+      final enteredValue = num.tryParse(newValue.text);
+      if (enteredValue == null ||
+          enteredValue < range.$1 ||
+          enteredValue > range.$2) {
         return oldValue;
       }
-    }
-
-    return newValue;
+      return newValue;
+    });
   }
+
+  ///
+  static TextInputFormatter enforcedDecimalPlace(int length) =>
+      FilteringTextInputFormatter.allow(
+        RegExp('^\\d+\\.?\\d{0,$length}'),
+      );
+
+  ///
+  ///     Symbol    Meaning                Presentation       Example
+  ///     ------    -------                ------------       -------
+  ///     yyyy      year                   (Number)           1996
+  ///     MM        month in year          (Number)           07
+  ///     dd        day in month           (Number)           10
+  ///     HH        hour in day (0~23)     (Number)           0
+  ///     mm        minute in hour         (Number)           30
+  ///     ss        second in minute       (Number)           55
+  ///
+  /// yyyy-MM-ddTHH:mm:ss, this will be the converted format
+  ///
+  /// `M` and `m` is case sensitive, uppercase refers to Month and lowercase
+  /// refers to minute
+  static TextInputFormatter enforcedDateFormat({String? format}) =>
+      DateInputFormatter(format: format);
+
+  ///
+  static TextInputFormatter creditCard({
+    int length = 16,
+    int chunkSize = 4,
+    String separator = ' ',
+  }) =>
+      CreditCardNumberInputFormatter(
+        length: length,
+        chunkSize: chunkSize,
+        separator: separator,
+      );
 }
 
 ///
@@ -92,6 +128,7 @@ class DateInputFormatter extends TextInputFormatter {
 
   /// Get [DateTime] from the current state
   DateTime? get dateTime {
+    if (_map.isEmpty) return null;
     try {
       var year = 0;
       var month = 1;
@@ -139,23 +176,31 @@ class DateInputFormatter extends TextInputFormatter {
 
   /// Convert [dateTime] to current [format]
   String dateString(DateTime dateTime) {
+    if (_map.isEmpty) return '';
+
     final strBuffer = StringBuffer();
     for (final MapEntry(:key, :value) in _map.entries) {
-      final dynamic dateValue = switch (key) {
+      final symbolLength = value.symbol.length;
+      final dateValue = switch (key) {
         'y' || 'Y' => () {
             final year = '${dateTime.year}';
-            return year.substring(year.length - value.symbol.length);
+            final diff = year.length - symbolLength;
+            if (diff.isNegative) {
+              return year;
+            }
+            return year.substring(year.length - symbolLength);
           }(),
-        'M' => dateTime.month,
-        'd' || 'D' => dateTime.day,
-        'h' || 'H' => dateTime.hour,
-        'm' => dateTime.minute,
-        's' || 'S' => dateTime.second,
+        'M' => '${dateTime.month}',
+        'd' || 'D' => '${dateTime.day}',
+        'h' || 'H' => '${dateTime.hour}',
+        'm' => '${dateTime.minute}',
+        's' || 'S' => '${dateTime.second}',
         _ => null,
       };
 
       if (dateValue != null) {
-        strBuffer.write('$dateValue${value.delimiter}');
+        strBuffer
+            .write('${dateValue.padLeft(symbolLength, '0')}${value.delimiter}');
       }
     }
 
@@ -292,8 +337,6 @@ class CreditCardNumberInputFormatter extends TextInputFormatter {
     final offset = cursorIndex == formatted.length
         ? formatted.length
         : _calculateOffset(newValue.text, formatted, cursorIndex);
-
-    print(offset);
 
     return TextEditingValue(
       text: formatted,

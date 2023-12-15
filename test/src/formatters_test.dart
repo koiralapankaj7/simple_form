@@ -1,9 +1,11 @@
+// ignore_for_file: lines_longer_than_80_chars
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simple_form/src/formatters.dart';
 
 void main() {
-  group('FormatValidation Tests', () {
+  group('DateInputFormatter FormatValidation Tests', () {
     // yyyy-MM-ddTHH:mm:ss
     final differentFormats = {
       'dd/MM/yyyyTHH:mm:ss': 'dd/MM/yyyy HH:mm:ss',
@@ -31,6 +33,9 @@ void main() {
       'da12/ds25/dsds125': '',
     };
 
+    //   Expected: (DateTime, String):<(0001-01-01 00:00:00.000, )>
+    // Actual: 'DD-MM-YYYY HH,mm,SS'
+
     test('parse date format', () {
       for (final MapEntry(:key, :value) in differentFormats.entries) {
         final formatter = DateInputFormatter(format: key);
@@ -39,7 +44,7 @@ void main() {
     });
   });
 
-  group('DateInputFormatter Tests', () {
+  group('DateInputFormatter DateTime Tests', () {
     // 'format' : (input,output, DateTime)
     final formats = {
       'dd/MM/yyyyTHH:mm:ss': (
@@ -112,6 +117,11 @@ void main() {
         '2022-06-23',
         DateTime(2022, 06, 23),
       ),
+      'yyyyyyyy-MMMM-dddd': (
+        '20220623',
+        '',
+        null,
+      ),
     };
 
     test('parse string to date string', () {
@@ -159,6 +169,37 @@ void main() {
       const oldValue = TextEditingValue(text: '23/06/2022');
       const newValue = TextEditingValue(text: '23/06/202');
       expect(formatter.formatEditUpdate(oldValue, newValue).text, '23/06/202');
+    });
+  });
+
+  // 0001-01-01 00:00:00.000
+  group('DateInputFormatter toString Tests', () {
+    // yyyy-MM-ddTHH:mm:ss
+    final differentFormats = {
+      'dd/MM/yyyy': (DateTime(2023, 12, 14), '14/12/2023'),
+      'dd/MM/yyy': (DateTime(2023, 12, 14), '14/12/023'),
+      'dd/MM/yy': (DateTime(2023, 12, 14), '14/12/23'),
+      'd/M/y': (DateTime(2023, 12, 14), '14/12/3'),
+      'MM/yy': (DateTime(2023, 12, 14), '12/23'),
+      'M/y': (DateTime(2023, 12, 14), '12/3'),
+      'Mm/yy': (DateTime(0001), '01/01'),
+
+      // Delimiters
+      'Dd-Mm-YyyyTHh,mM,Ss': (DateTime(2023, 12, 14), '14-12-2023 00,00,00'),
+      'Dd-Mm-YyyyTHh mM,Ss': (DateTime(2023, 12, 14), '14-12-2023 00 00,00'),
+      'Dd Mm,YyyyTHh mM Ss': (DateTime(2023, 12, 14), '14 12,2023 00 00 00'),
+
+      // Invalid
+      'ra/da/da': (DateTime(0001, 01, 01), ''),
+      'dds/yydd/mmdd': (DateTime(0001, 01, 01), ''),
+      'da12/ds25/dsds125': (DateTime(0001, 01, 01), ''),
+    };
+
+    test('Convert DateTime to string', () {
+      for (final MapEntry(:key, :value) in differentFormats.entries) {
+        final formatter = DateInputFormatter(format: key);
+        expect(formatter.dateString(value.$1), value.$2);
+      }
     });
   });
 
