@@ -22,8 +22,8 @@ class TFCtrl<T> extends ValueCtrl<T> {
   }
 
   @override
-  void silentUpdate(T? newValue) {
-    super.silentUpdate(newValue);
+  void update(T? newValue, {bool silent = false}) {
+    super.update(newValue, silent: silent);
     if (_editingController != null) {
       WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
         _editingController!.text = serializer.valueConverter(newValue) ?? '';

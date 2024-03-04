@@ -7,9 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:simple_form/src/country_lov.dart';
 import 'package:simple_form/src/field_focus.dart';
 import 'package:simple_utils/simple_utils.dart';
+import 'package:simple_widgets/simple_widgets.dart';
 
 import '../simple_form.dart';
-import 'dropdown_button.dart';
 
 ///
 typedef Comparator<T> = bool Function(T? current, T item);
@@ -215,11 +215,16 @@ class SimpleField<T> extends FormField<T> {
     Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
+    FormFieldSetter<String>? onSubmitted,
     bool enabled = true,
+    bool? autoFocus,
+    FocusNode? focusNode,
+    int? maxLines,
     String? restorationId,
     Iterable<String>? autofillHints,
     List<TextInputFormatter>? inputFormatters,
     TextInputAction? textInputAction,
+    TapRegionCallback? onTapOutside,
     Key? key,
   }) =>
       SimpleField<String>(
@@ -237,16 +242,23 @@ class SimpleField<T> extends FormField<T> {
         onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
+        decoration: decoration,
         key: key,
         builder: (context, field) {
           return TextField(
             controller: field._controller.textController,
             onChanged: field.didChange,
+            autofocus: autoFocus ?? false,
+            focusNode: focusNode,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
             autofillHints: autofillHints,
             inputFormatters: inputFormatters,
             textInputAction: textInputAction ?? TextInputAction.next,
+            minLines: 1,
+            maxLines: maxLines,
+            onTapOutside: onTapOutside,
+            onSubmitted: onSubmitted,
           );
         },
       );
@@ -933,8 +945,9 @@ class SimpleField<T> extends FormField<T> {
         builder: (context, field) {
           final decor = DefaultInputDecoration.of(context);
 
-          return SimpleDropdownMenu(
+          return SimpleDropdownButton(
             items: items,
+            disabled: true,
             onSelected: (value) {
               if (value == null) return;
               field.didChange(value);
@@ -1070,7 +1083,7 @@ class SimpleFieldState<T> extends FormFieldState<T> {
     _controller = _widget.controller ?? TFCtrl<T>(value: widget.initialValue);
     _controller
       ..key = _widget.jsonKey
-      ..silentUpdate(widget.initialValue)
+      ..update(widget.initialValue, silent: true)
       ..addListener(_listenController);
     if (_widget.serializer != null) {
       _controller.serializer = _widget.serializer;
@@ -1144,13 +1157,14 @@ class SimpleFieldState<T> extends FormFieldState<T> {
     final enabled =
         widget.enabled ? _widget.listenables.hasValue : widget.enabled;
 
-    final border = OutlineInputBorder(
-      borderSide: BorderSide(
-        width: 0.5,
-        color: theme.colorScheme.onBackground,
-      ),
-      borderRadius: BorderRadius.circular(10),
-    );
+    final border = _widget.decoration?.border ??
+        OutlineInputBorder(
+          borderSide: BorderSide(
+            width: 0.5,
+            color: theme.colorScheme.onBackground,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        );
     final errorStyle = enabled
         ? null
         : const TextStyle(height: 0.01, color: Colors.transparent);
@@ -1319,8 +1333,8 @@ class _LabelBuilder extends StatelessWidget {
   }
 }
 
-extension on OutlineInputBorder {
-  OutlineInputBorder withColor(Color? color) {
+extension on InputBorder {
+  InputBorder withColor(Color? color) {
     if (color == null) return this;
     return copyWith(borderSide: borderSide.copyWith(color: color));
   }
