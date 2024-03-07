@@ -12,12 +12,12 @@ dependencies:
   flutter:
     sdk: flutter
   simple_utils:
-    path: ../simple_utils
+    git:
+      url: https://github.com/koiralapankaj7/simple_utils.git
   simple_widgets:
-    path: ../simple_widgets
-  # simple_utils:
-  #   git:
-  #     url: https://github.com/koiralapankaj7/simple_utils.git
+    git:
+      url: https://github.com/koiralapankaj7/simple_widgets.git
+  
 
 dev_dependencies:
   flutter_test:
