@@ -1172,7 +1172,7 @@ class SimpleFieldState<T> extends FormFieldState<T> {
     var decoration = _widget.decoration ?? const InputDecoration();
 
     final floatingLabelBehavior =
-        decoration.floatingLabelBehavior ?? FloatingLabelBehavior.never;
+        decoration.floatingLabelBehavior ?? FloatingLabelBehavior.auto;
 
     final label = _widget.labelText ??
         _widget.decoration?.labelText ??
