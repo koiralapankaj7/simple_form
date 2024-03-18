@@ -923,6 +923,7 @@ class SimpleField<T> extends FormField<T> {
     Comparator<T>? comparator,
     List<TextInputFormatter>? inputFormatters,
     Iterable<String>? autofillHints,
+    ValueSerializer<T>? serializer,
     Key? key,
   }) =>
       SimpleField<T>(
@@ -941,6 +942,7 @@ class SimpleField<T> extends FormField<T> {
         onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
+        serializer: serializer,
         key: key,
         builder: (context, field) {
           final decor = DefaultInputDecoration.of(context);
@@ -1068,6 +1070,7 @@ class SimpleField<T> extends FormField<T> {
 ///
 class SimpleFieldState<T> extends FormFieldState<T> {
   SimpleField<T> get _widget => widget as SimpleField<T>;
+
   late TFCtrl<T> _controller;
 
   @override
@@ -1092,6 +1095,10 @@ class SimpleFieldState<T> extends FormFieldState<T> {
 
   /// Update value
   void _listenController() {
+    if (!_watchListener) {
+      _watchListener = true;
+      return;
+    }
     if (_controller.value == value) return;
     didChange(_controller.value);
   }
@@ -1108,14 +1115,17 @@ class SimpleFieldState<T> extends FormFieldState<T> {
     didChange(_controller.serializer.stringConverter(value));
   }
 
+  bool _watchListener = true;
+
   @override
   void didChange(T? value) {
     if (this.value == value) return;
     super.didChange(value);
+    _widget.onChanged?.call(value);
     // if (errorText != null && value == null) {
     //   validate();
     // }
-    _widget.onChanged?.call(value);
+    _watchListener = false;
     _controller.value = value;
   }
 
@@ -1147,6 +1157,18 @@ class SimpleFieldState<T> extends FormFieldState<T> {
   void deactivate() {
     SimpleForm.maybeOf(context)?._unregister(this);
     super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_listenController);
+    if (_widget.controller == null) {
+      _controller.dispose();
+    }
+    for (final element in _widget.listenables) {
+      element.removeListener(() => _listenListenable(element));
+    }
+    super.dispose();
   }
 
   @override
@@ -1211,18 +1233,6 @@ class SimpleFieldState<T> extends FormFieldState<T> {
       decoration: decoration,
       child: child,
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.removeListener(_listenController);
-    if (_widget.controller == null) {
-      _controller.dispose();
-    }
-    for (final element in _widget.listenables) {
-      element.removeListener(() => _listenListenable(element));
-    }
-    super.dispose();
   }
 }
 
