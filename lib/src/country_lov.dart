@@ -1,6 +1,6 @@
+import 'package:collection_view/collection_view.dart';
 import 'package:flutter/material.dart';
 import 'package:simple_form/src/country_repository.dart';
-import 'package:simple_utils/simple_utils.dart';
 
 ///
 class CountryLov extends StatefulWidget {
@@ -31,13 +31,6 @@ class CountryLov extends StatefulWidget {
 
 class _CountryLovState extends State<CountryLov> {
   late final _repo = widget.repository ?? CountryRepository.instance;
-  late final _debouncer = Debouncer(const Duration(milliseconds: 200));
-
-  @override
-  void dispose() {
-    _debouncer.reset();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,9 +50,11 @@ class _CountryLovState extends State<CountryLov> {
                 Expanded(
                   child: TextField(
                     onChanged: (value) {
-                      _debouncer.call(() {
-                        _repo.search(value);
-                      });
+                      EasyDebounce.debounce(
+                        'searchCountry',
+                        const Duration(milliseconds: 200),
+                        () => _repo.search(value),
+                      );
                     },
                     decoration: InputDecoration(
                       hintText: 'Search...',

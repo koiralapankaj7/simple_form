@@ -1,13 +1,8 @@
-// ignore_for_file: lines_longer_than_80_chars
-
-import 'package:flutter/cupertino.dart' show CupertinoSwitch;
-import 'package:flutter/foundation.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:simple_form/src/country_lov.dart';
-import 'package:simple_form/src/field_focus.dart';
-import 'package:simple_utils/simple_utils.dart';
-import 'package:simple_widgets/simple_widgets.dart';
 
 import '../simple_form.dart';
 
@@ -18,28 +13,141 @@ typedef Comparator<T> = bool Function(T? current, T item);
 typedef ValueWidgetBuilder<T> = Widget Function(T item);
 
 ///
+typedef SimpleFieldStateBuilder<T> = Widget Function(
+  BuildContext context,
+  SimpleFieldState<T> field,
+);
+
+///
+typedef StringConverter<T> = T? Function(String? value);
+
+///
+typedef ValueConverter<T> = String? Function(T? value);
+
+///
+typedef JsonValueConverter<T> = dynamic Function(T? value);
+
+///
+class ValueSerializer<T> {
+  ///
+  const ValueSerializer({
+    StringConverter<T>? stringConverter,
+    ValueConverter<T>? valueConverter,
+    JsonValueConverter<T>? jsonValueConverter,
+  })  : stringConverter = stringConverter ?? defaultStringConverter,
+        valueConverter = valueConverter ?? defaultValueConverter,
+        jsonValueConverter =
+            jsonValueConverter ?? valueConverter ?? defaultValueConverter;
+
+  ///
+  static T? defaultStringConverter<T>(String? source) {
+    if (source == null) return null;
+    return switch (T) {
+      String => source as T?,
+      int => int.tryParse(source) as T?,
+      double => double.tryParse(source) as T?,
+      num => num.tryParse(source) as T?,
+      DateTime => DateTime.tryParse(source) as T?,
+      bool => source.toBool as T?,
+      _ => null,
+    };
+  }
+
+  ///
+  static String? defaultValueConverter<T>(T? value) => value?.toString();
+
+  /// Convert [T] to [String]
+  final StringConverter<T> stringConverter;
+
+  /// Convert String to [T]
+  final ValueConverter<T> valueConverter;
+
+  /// Convert [T] to json value, by default [stringConverter] will be used
+  final JsonValueConverter<T> jsonValueConverter;
+}
+
+///
+class AutoScroll extends Equatable {
+  ///
+  const AutoScroll({
+    this.alignment = 1.0,
+    this.duration = kThemeChangeDuration,
+    this.curve = Curves.easeIn,
+    this.autofocus = true,
+    this.onDone,
+  });
+
+  ///
+  static const AutoScroll none = _NoScroll();
+
+  /// 0.0 -> Top, 0.5 -> Center, 1.0 -> Bottom
+  final double alignment;
+
+  ///
+  final Duration duration;
+
+  ///
+  final Curve curve;
+
+  ///
+  final bool autofocus;
+
+  ///
+  final void Function(FormFieldState<dynamic> fieldState)? onDone;
+
+  ///
+  Future<void> ensureVisible(FormFieldState<dynamic> fieldState) async {
+    await Scrollable.ensureVisible(
+      fieldState.context,
+      alignment: alignment,
+      duration: duration,
+      curve: curve,
+    );
+    onDone?.call(fieldState);
+    if (fieldState case final SimpleFieldState<dynamic> fieldState
+        when autofocus) {
+      fieldState.effectiveFocusNode.requestFocus();
+    }
+  }
+
+  @override
+  List<Object?> get props => [alignment, duration, curve];
+}
+
+class _NoScroll extends AutoScroll {
+  const _NoScroll() : super();
+
+  @override
+  Future<void> ensureVisible(FormFieldState<dynamic> fieldState) async {}
+}
+
+///
 class SimpleForm extends Form {
   ///
   const SimpleForm({
     required super.child,
     super.autovalidateMode,
     super.canPop,
-    super.onPopInvoked,
+    super.onPopInvokedWithResult,
     super.onChanged,
     super.key,
-    this.initialJson = const {},
-    this.autoDispose = false,
+    this.json = const {},
+    this.autoDispose = true,
     this.autoFillGroup = true,
+    this.autoScroll = const AutoScroll(),
   });
 
   ///
-  final Map<String, dynamic> initialJson;
+  final Map<String, dynamic> json;
 
   /// Auto dispose fields controller, default to `true`
   final bool autoDispose;
 
   ///
   final bool autoFillGroup;
+
+  ///
+  final AutoScroll autoScroll;
 
   ///
   static SimpleFormState? maybeOf(BuildContext context) {
@@ -75,33 +183,57 @@ class SimpleForm extends Form {
 
 ///
 class SimpleFormState extends FormState {
-  final Set<SimpleFieldState<dynamic>> _fields = <SimpleFieldState<dynamic>>{};
+  final _fields = <SimpleFieldState<dynamic>>{};
 
-  SimpleForm get _widget => widget as SimpleForm;
+  @override
+  SimpleForm get widget => super.widget as SimpleForm;
 
-  void _register(SimpleFieldState<dynamic> field) {
-    if (_widget.initialJson.isNotEmpty && field._widget.jsonKey != null) {
-      final value = _widget.initialJson[field._widget.jsonKey];
-      WidgetsBinding.instance.endOfFrame.then((_) {
-        field.didChange(value);
-      });
+  void _register<T>(SimpleFieldState<T> field) {
+    final initialValue = widget.json[field.widget.jsonKey]?.toString();
+    if (field._toValue(initialValue) case final T value) {
+      field.setValue(value);
     }
     _fields.add(field);
   }
 
-  void _unregister(SimpleFieldState<dynamic> field) {
-    if (_widget.autoDispose) {
-      field._widget.controller?.dispose();
-    }
+  void _unregister<T>(SimpleFieldState<T> field) {
     _fields.remove(field);
   }
 
   ///
   Map<String, dynamic> get json => {
         for (final field in _fields)
-          if (field._controller.hasEntry)
-            field._controller.key: field._controller.entry.value,
+          if (field._asJsonValue() case final Object value
+              when field.widget.jsonKey != null)
+            field.widget.jsonKey!: value,
       };
+
+  @override
+  bool validate() {
+    return widget.autoScroll == AutoScroll.none
+        ? super.validate()
+        : validateGranularly().isEmpty;
+  }
+
+  @override
+  Set<FormFieldState<Object?>> validateGranularly() {
+    final invalidFields = super.validateGranularly();
+    if (widget.autoScroll == AutoScroll.none) return invalidFields;
+    if (invalidFields.firstOrNull case final FormFieldState<dynamic> state) {
+      widget.autoScroll.ensureVisible(state);
+    }
+    return invalidFields;
+  }
+
+  @override
+  void dispose() {
+    if (widget.autoDispose) {
+      for (final field in _fields) {
+        field.widget.controller?.dispose();
+      }
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -109,69 +241,56 @@ class SimpleFormState extends FormState {
       formState: this,
       child: super.build(context),
     );
-
-    if (_widget.autoFillGroup) {
-      return AutofillGroup(
-        child: child,
-      );
-    }
-    return child;
-  }
-
-  @override
-  void dispose() {
-    if (_widget.autoDispose) {
-      for (final field in _fields) {
-        field._widget.controller?.dispose();
-      }
-    }
-    super.dispose();
+    return widget.autoFillGroup ? AutofillGroup(child: child) : child;
   }
 }
-
-///
-typedef SimpleFieldStateBuilder<T> = Widget Function(
-  BuildContext context,
-  SimpleFieldState<T> field,
-);
 
 ///
 class SimpleField<T> extends FormField<T> {
   ///
   SimpleField({
     required SimpleFieldStateBuilder<T> builder,
-    AutovalidateMode? autovalidateMode,
-    T? initialValue,
     FormFieldValidator<T>? validator,
     bool isRequired = false,
-    super.enabled,
-    super.onSaved,
-    super.restorationId,
     super.key,
+    super.onSaved,
+    super.forceErrorText,
+    super.initialValue,
+    super.enabled,
+    super.autovalidateMode,
+    super.restorationId,
+    this.readOnly = false,
     this.jsonKey,
     this.serializer,
     this.decoration,
     this.labelText,
     this.hintText,
     this.controller,
+    this.focusNode,
+    this.onTap,
     this.onChanged,
-    this.listenables = const [],
-    this.onListenableChanged,
+    this.onFocusChanged,
+    this.onHover,
   }) : super(
-          autovalidateMode: autovalidateMode ?? AutovalidateMode.disabled,
-          initialValue: initialValue ?? controller?.value,
-          validator: validator ??
-              (value) {
-                if (isRequired && value == null) {
-                  return 'Required Field';
-                }
-                return null;
+          validator: validator ?? (isRequired ? _defaultValidator<T> : null),
+          builder: (field) {
+            return Builder(
+              builder: (context) {
+                return UnmanagedRestorationScope(
+                  child: builder(context, field as SimpleFieldState<T>),
+                );
               },
-          builder: (field) => Builder(
-            builder: (context) =>
-                builder(context, field as SimpleFieldState<T>),
-          ),
+            );
+          },
         );
+
+  static String? _defaultValidator<T>(T? value) {
+    if (value case final String stringValue) {
+      return stringValue.isEmpty ? 'Required Field' : null;
+    }
+    if (value == null) return 'Required Field';
+    return null;
+  }
 
   ///
   final String? jsonKey;
@@ -189,16 +308,25 @@ class SimpleField<T> extends FormField<T> {
   final String? hintText;
 
   ///
-  final TFCtrl<T>? controller;
+  final SimpleFieldController<T>? controller;
+
+  ///
+  final FocusNode? focusNode;
+
+  ///
+  final bool readOnly;
+
+  ///
+  final GestureTapCallback? onTap;
 
   ///
   final ValueChanged<T?>? onChanged;
 
   ///
-  final Iterable<ValueListenable<dynamic>> listenables;
+  final ValueChanged<bool>? onFocusChanged;
 
   ///
-  final ValueChanged<Listenable>? onListenableChanged;
+  final ValueSetter<bool>? onHover;
 
   ///
   static SimpleField<String> text({
@@ -210,9 +338,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<String>? controller,
+    SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     FormFieldSetter<String>? onSubmitted,
@@ -231,25 +358,24 @@ class SimpleField<T> extends FormField<T> {
         jsonKey: jsonKey,
         autovalidateMode: autovalidateMode,
         controller: controller,
+        focusNode: focusNode,
         enabled: enabled,
         initialValue: initialValue,
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         decoration: decoration,
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
-            onChanged: field.didChange,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
+            onChanged: field._onChangedHandler,
             autofocus: autoFocus ?? false,
-            focusNode: focusNode,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
             autofillHints: autofillHints,
@@ -275,9 +401,9 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<String>? controller,
+    SimpleFieldController<String>? controller,
+    FocusNode? focusNode,
     ValueChanged<String?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
@@ -294,15 +420,14 @@ class SimpleField<T> extends FormField<T> {
         jsonKey: jsonKey,
         autovalidateMode: autovalidateMode,
         controller: controller,
+        focusNode: focusNode,
         enabled: enabled,
         initialValue: initialValue,
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator ??
             (min == null
@@ -318,8 +443,9 @@ class SimpleField<T> extends FormField<T> {
           return StatefulBuilder(
             builder: (context, setState) {
               return TextField(
-                controller: field._controller.textController,
+                controller: field.effectiveController,
                 onChanged: field.didChange,
+                focusNode: field.effectiveFocusNode,
                 restorationId: restorationId,
                 decoration: decor.copyWith(
                   suffixIcon: FocusScope(
@@ -368,9 +494,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<int>? controller,
+    SimpleFieldController<int>? controller,
     ValueChanged<int?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<int>? onSaved,
     bool enabled = true,
@@ -393,10 +518,8 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
@@ -406,7 +529,8 @@ class SimpleField<T> extends FormField<T> {
           return StatefulBuilder(
             builder: (context, setState) {
               return TextField(
-                controller: field._controller.textController,
+                controller: field.effectiveController,
+                focusNode: field.effectiveFocusNode,
                 onChanged: field._onChangedHandler,
                 restorationId: restorationId,
                 decoration: decor.copyWith(
@@ -456,9 +580,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<Country>? controller,
+    SimpleFieldController<Country>? controller,
     ValueChanged<Country?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<Country>? onSaved,
     bool enabled = true,
@@ -478,17 +601,16 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
         builder: (context, field) {
           final repo = CountryRepository.instance;
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field._onChangedHandler,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context).copyWith(
@@ -534,9 +656,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<String>? controller,
+    SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
@@ -553,16 +674,15 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field.didChange,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
@@ -583,9 +703,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<String>? controller,
+    SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
@@ -602,16 +721,15 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field.didChange,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
@@ -639,9 +757,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<int>? controller,
+    SimpleFieldController<int>? controller,
     ValueChanged<int?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<int>? onSaved,
     bool enabled = true,
@@ -660,10 +777,8 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator ??
             (value) =>
@@ -671,7 +786,8 @@ class SimpleField<T> extends FormField<T> {
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field._onChangedHandler,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
@@ -696,9 +812,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<double>? controller,
+    SimpleFieldController<double>? controller,
     ValueChanged<double?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<double>? onSaved,
     bool enabled = true,
@@ -718,10 +833,8 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator ??
             (value) =>
@@ -729,7 +842,8 @@ class SimpleField<T> extends FormField<T> {
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field._onChangedHandler,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
@@ -753,9 +867,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<DateTime>? controller,
+    SimpleFieldController<DateTime>? controller,
     ValueChanged<DateTime?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<DateTime>? onSaved,
     bool enabled = true,
@@ -764,7 +877,8 @@ class SimpleField<T> extends FormField<T> {
     List<TextInputFormatter>? inputFormatters,
     Iterable<String>? autofillHints,
     DateType? type,
-    SimpleDatePicker? picker,
+    DateFormat? dateFormat,
+    // SimpleDatePicker? picker,
     TextInputAction? textInputAction,
     Key? key,
   }) =>
@@ -777,25 +891,24 @@ class SimpleField<T> extends FormField<T> {
         initialValue: initialValue,
         isRequired: isRequired,
         labelText: labelText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
+        serializer: ValueSerializer(
+          valueConverter: (value) {
+            if (value == null) return null;
+            return dateFormat?.format(value) ??
+                (type ?? DateType.none()).formatter.dateString(value);
+          },
+          stringConverter: (value) =>
+              (type ?? DateType.none()).formatter.dateTime,
+          jsonValueConverter: (value) => value?.toIso8601String(),
+        ),
         builder: (context, field) {
-          final datePicker = picker ?? SimpleDatePicker();
+          final datePicker = SimpleDatePicker(dateFormat: dateFormat);
           final dateType = type ?? DateType.none();
-          field._controller.serializer = ValueSerializer(
-            valueConverter: (value) {
-              if (value == null) return null;
-              return datePicker.dateFormat?.format(value) ??
-                  dateType.formatter.dateString(value);
-            },
-            stringConverter: (value) => dateType.formatter.dateTime,
-            jsonValueConverter: (value) => value?.toIso8601String(),
-          );
 
           Future<void> onPressed() async {
             final dateTime = await datePicker.open(context);
@@ -806,7 +919,8 @@ class SimpleField<T> extends FormField<T> {
           }
 
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field._onChangedHandler,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context).copyWith(
@@ -850,9 +964,8 @@ class SimpleField<T> extends FormField<T> {
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    TFCtrl<String>? controller,
+    SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
@@ -872,16 +985,15 @@ class SimpleField<T> extends FormField<T> {
         isRequired: isRequired,
         labelText: labelText,
         hintText: hintText,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
         builder: (context, field) {
           return TextField(
-            controller: field._controller.textController,
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
             onChanged: field._onChangedHandler,
             restorationId: restorationId,
             decoration: DefaultInputDecoration.of(context),
@@ -900,89 +1012,87 @@ class SimpleField<T> extends FormField<T> {
         },
       );
 
-  ///
-  static SimpleField<T> dropdown<T>({
-    required List<T> items,
-    ValueWidgetBuilder<T>? itemBuilder,
-    ValueWidgetBuilder<T>? builder,
-    String? jsonKey,
-    AutovalidateMode? autovalidateMode,
-    T? initialValue,
-    FormFieldValidator<T>? validator,
-    bool isRequired = false,
-    String? labelText,
-    String? hintText,
-    InputDecoration? decoration,
-    TFCtrl<T>? controller,
-    ValueChanged<T?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
-    ValueChanged<Listenable>? onListenableChanged,
-    FormFieldSetter<T>? onSaved,
-    bool enabled = true,
-    String? restorationId,
-    Comparator<T>? comparator,
-    List<TextInputFormatter>? inputFormatters,
-    Iterable<String>? autofillHints,
-    ValueSerializer<T>? serializer,
-    Key? key,
-  }) =>
-      SimpleField<T>(
-        jsonKey: jsonKey,
-        autovalidateMode: autovalidateMode,
-        controller: controller,
-        decoration: decoration,
-        enabled: enabled,
-        initialValue: initialValue,
-        isRequired: isRequired,
-        labelText: labelText,
-        hintText: hintText,
-        listenables: listenables,
-        onChanged: onChanged,
-        onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
-        restorationId: restorationId,
-        validator: validator,
-        serializer: serializer,
-        key: key,
-        builder: (context, field) {
-          final decor = DefaultInputDecoration.of(context);
+  // ///
+  // static SimpleField<T> dropdown<T>({
+  //   required List<T> items,
+  //   ValueWidgetBuilder<T>? itemBuilder,
+  //   ValueWidgetBuilder<T>? builder,
+  //   String? jsonKey,
+  //   AutovalidateMode? autovalidateMode,
+  //   T? initialValue,
+  //   FormFieldValidator<T>? validator,
+  //   bool isRequired = false,
+  //   String? labelText,
+  //   String? hintText,
+  //   InputDecoration? decoration,
+  //   SimpleFieldController<T>? controller,
+  //   ValueChanged<T?>? onChanged,
+  //   ValueChanged<Listenable>? onListenableChanged,
+  //   FormFieldSetter<T>? onSaved,
+  //   bool enabled = true,
+  //   String? restorationId,
+  //   Comparator<T>? comparator,
+  //   List<TextInputFormatter>? inputFormatters,
+  //   Iterable<String>? autofillHints,
+  //   ValueSerializer<T>? serializer,
+  //   Key? key,
+  // }) =>
+  //     SimpleField<T>(
+  //       jsonKey: jsonKey,
+  //       autovalidateMode: autovalidateMode,
+  //       controller: controller,
+  //       decoration: decoration,
+  //       enabled: enabled,
+  //       initialValue: initialValue,
+  //       isRequired: isRequired,
+  //       labelText: labelText,
+  //       hintText: hintText,
+  //       onChanged: onChanged,
+  //       onSaved: onSaved,
+  //
+  //       restorationId: restorationId,
+  //       validator: validator,
+  //       serializer: serializer,
+  //       key: key,
+  //       builder: (context, field) {
+  //         final decor = DefaultInputDecoration.of(context);
 
-          return SimpleDropdownButton(
-            items: items,
-            disabled: true,
-            onSelected: (value) {
-              if (value == null) return;
-              field.didChange(value);
-            },
-            isSelected: (item) =>
-                comparator?.call(field.value, item) ?? item == field.value,
-            menuItemBuilder: (context, item) {
-              return itemBuilder?.call(item) ??
-                  Text(
-                    '$item',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  );
-            },
-            builder: (state) {
-              return TextField(
-                controller: field._controller.textController,
-                focusNode: state.focusNode,
-                onChanged: field._onChangedHandler,
-                restorationId: restorationId,
-                decoration: decor.copyWith(
-                  suffixIcon: decor.suffixIcon ??
-                      const Icon(Icons.keyboard_arrow_down_rounded),
-                ),
-                autofillHints: autofillHints,
-                keyboardType: TextInputType.datetime,
-                inputFormatters: inputFormatters,
-                readOnly: true,
-                onTap: enabled ? state.onPressed : null,
-              );
-            },
-          );
-        },
-      );
+  //         return SimpleDropdownButton(
+  //           items: items,
+  //           disabled: true,
+  //           onSelected: (value) {
+  //             if (value == null) return;
+  //             field.didChange(value);
+  //           },
+  //           isSelected: (item) =>
+  //               comparator?.call(field.value, item) ?? item == field.value,
+  //           menuItemBuilder: (context, item) {
+  //             return itemBuilder?.call(item) ??
+  //                 Text(
+  //                   '$item',
+  //                   style: Theme.of(context).textTheme.bodyMedium,
+  //                 );
+  //           },
+  //           builder: (state) {
+  //             return TextField(
+  //               controller: field.controller,
+  //               focusNode: state.focusNode,
+  //               onChanged: field._onChangedHandler,
+  //               restorationId: restorationId,
+  //               decoration: decor.copyWith(
+  //                 suffixIcon: decor.suffixIcon ??
+  //                     const Icon(Icons.keyboard_arrow_down_rounded),
+  //               ),
+  //               autofillHints: autofillHints,
+  //               keyboardType: TextInputType.datetime,
+  //               inputFormatters: inputFormatters,
+  //               readOnly: true,
+  //               onTap: enabled ? state.onPressed : null,
+  //             );
+  //           },
+  //         );
+  //       },
+  //     );
 
   ///
   static SimpleField<bool> switchBox({
@@ -992,9 +1102,8 @@ class SimpleField<T> extends FormField<T> {
     bool? initialValue,
     FormFieldValidator<bool>? validator,
     bool isRequired = false,
-    TFCtrl<bool>? controller,
+    SimpleFieldController<bool>? controller,
     ValueChanged<bool?>? onChanged,
-    Iterable<ValueListenable<dynamic>> listenables = const [],
     ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<bool>? onSaved,
     bool enabled = true,
@@ -1022,44 +1131,49 @@ class SimpleField<T> extends FormField<T> {
         enabled: enabled,
         initialValue: initialValue,
         isRequired: isRequired,
-        listenables: listenables,
         onChanged: onChanged,
         onSaved: onSaved,
-        onListenableChanged: onListenableChanged,
         restorationId: restorationId,
         validator: validator,
         key: key,
         builder: (context, field) {
-          final decor = DefaultInputDecoration.of(context);
-          return FieldFocus(
-            isEmpty: true,
-            enabled: false,
-            decoration: decor.copyWith(
-              // hintText: label,
-              // hintStyle:
-              //     decor.labelStyle ?? Theme.of(context).textTheme.bodyLarge,
-              suffixIconConstraints: BoxConstraints.tight(
-                Size(40.0 + decor.contentPadding.right, 20),
-              ),
-              suffixIcon: Padding(
-                padding: EdgeInsets.only(right: decor.contentPadding.right),
-                child: FittedBox(
-                  fit: BoxFit.fitWidth,
-                  child: CupertinoSwitch(
-                    value: field.value ?? false,
-                    onChanged: field.didChange,
-                  ),
-                ),
-              ),
-            ),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                label,
-                style: labelStyle ?? Theme.of(context).textTheme.bodyMedium,
-              ),
+          // final decor = DefaultInputDecoration.of(context);
+          return Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              style: labelStyle ?? Theme.of(context).textTheme.bodyMedium,
             ),
           );
+          // return FieldFocus(
+          //   isEmpty: true,
+          //   enabled: false,
+          //   decoration: decor.copyWith(
+          //     // hintText: label,
+          //     // hintStyle:
+          //     //     decor.labelStyle ?? Theme.of(context).textTheme.bodyLarge,
+          //     suffixIconConstraints: BoxConstraints.tight(
+          //       Size(40.0 + decor.contentPadding.right, 20),
+          //     ),
+          //     suffixIcon: Padding(
+          //       padding: EdgeInsets.only(right: decor.contentPadding.right),
+          //       child: FittedBox(
+          //         fit: BoxFit.fitWidth,
+          //         child: CupertinoSwitch(
+          //           value: field.value ?? false,
+          //           onChanged: field.didChange,
+          //         ),
+          //       ),
+          //     ),
+          //   ),
+          //   child: Align(
+          //     alignment: Alignment.centerLeft,
+          //     child: Text(
+          //       label,
+          //       style: labelStyle ?? Theme.of(context).textTheme.bodyMedium,
+          //     ),
+          //   ),
+          // );
         },
       );
 
@@ -1069,88 +1183,178 @@ class SimpleField<T> extends FormField<T> {
 
 ///
 class SimpleFieldState<T> extends FormFieldState<T> {
-  SimpleField<T> get _widget => widget as SimpleField<T>;
+  ValueSerializer<T>? _serializer;
+  RestorableTextEditingController? _controller;
+  FocusNode? _focusNode;
 
-  late TFCtrl<T> _controller;
+  ///
+  TextEditingController get effectiveController =>
+      widget.controller ?? _controller!.value;
+
+  ///
+  ValueSerializer<T> get effectiveSerializer =>
+      widget.serializer ?? (_serializer ??= ValueSerializer<T>());
+
+  ///
+  FocusNode get effectiveFocusNode => widget.focusNode ?? _focusNode!;
+
+  // TODO(pankajKoirala): Check if this works as intended.
+  T? _toValue(String? value) {
+    return effectiveSerializer.stringConverter(value);
+  }
+
+  String? _asString(T? value) {
+    return effectiveSerializer.valueConverter(value);
+  }
+
+  dynamic _asJsonValue([T? value]) {
+    return effectiveSerializer.jsonValueConverter(value ?? this.value);
+  }
+
+  @override
+  SimpleField<T> get widget => super.widget as SimpleField<T>;
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    super.restoreState(oldBucket, initialRestore);
+    if (_controller != null) {
+      _registerController();
+    }
+    // Make sure to update the internal [FormFieldState] value to sync up with
+    // text editing controller value.
+    setValue(_toValue(effectiveController.text));
+  }
+
+  void _registerController() {
+    assert(_controller != null, '');
+    registerForRestoration(_controller!, 'controller');
+  }
+
+  void _createLocalController([TextEditingValue? value]) {
+    assert(_controller == null, '');
+    _controller = value == null
+        ? RestorableTextEditingController()
+        : RestorableTextEditingController.fromValue(value);
+    if (!restorePending) {
+      _registerController();
+    }
+  }
+
+  void _createLocalFocusNode() {
+    assert(_focusNode == null, '');
+    _focusNode = FocusNode(debugLabel: 'SimpleField<$T>');
+  }
 
   @override
   void initState() {
     super.initState();
-    _initController();
-    for (final element in _widget.listenables) {
-      element.addListener(() => _listenListenable(element));
+    if (widget.controller == null) {
+      _createLocalController();
+    } else {
+      widget.controller!
+        .._attach(this)
+        ..addListener(_handleControllerChanged);
+    }
+    if (widget.focusNode == null) {
+      _createLocalFocusNode();
+    }
+    if (widget.onFocusChanged != null) {
+      effectiveFocusNode.addListener(_focusListener);
     }
   }
 
-  void _initController() {
-    _controller = _widget.controller ?? TFCtrl<T>(value: widget.initialValue);
-    _controller
-      ..key = _widget.jsonKey
-      ..update(widget.initialValue, silent: true)
-      ..addListener(_listenController);
-    if (_widget.serializer != null) {
-      _controller.serializer = _widget.serializer;
-    }
-  }
-
-  /// Update value
-  void _listenController() {
-    if (!_watchListener) {
-      _watchListener = true;
-      return;
-    }
-    if (_controller.value == value) return;
-    didChange(_controller.value);
-  }
-
-  /// Triggered when any one of listenable changed
-  void _listenListenable(Listenable listenable) {
-    // Ok to call didChange as these are from separate listenable
-    didChange(null);
-    _widget.onListenableChanged?.call(listenable);
-  }
-
-  /// TextField onChanged handler
-  void _onChangedHandler(String value) {
-    didChange(_controller.serializer.stringConverter(value));
-  }
-
-  bool _watchListener = true;
-
-  @override
-  void didChange(T? value) {
-    if (this.value == value) return;
-    super.didChange(value);
-    _widget.onChanged?.call(value);
-    // if (errorText != null && value == null) {
-    //   validate();
-    // }
-    _watchListener = false;
-    _controller.value = value;
+  void _focusListener() {
+    widget.onFocusChanged?.call(effectiveFocusNode.hasFocus);
   }
 
   @override
   void didUpdateWidget(SimpleField<T> oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != _widget.controller) {
-      if (oldWidget.controller == null) {
-        _controller
-          ..removeListener(_listenController)
-          ..dispose();
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?.removeListener(_handleControllerChanged);
+      widget.controller?.addListener(_handleControllerChanged);
+      if (oldWidget.controller != null && widget.controller == null) {
+        _createLocalController(oldWidget.controller!.value);
       }
-      _controller = _widget.controller ?? TFCtrl<T>(value: widget.initialValue);
-    }
-    if (oldWidget.serializer != _widget.serializer) {
-      _controller.serializer = _widget.serializer;
+      if (widget.controller != null) {
+        setValue(_toValue(widget.controller!.text));
+        if (oldWidget.controller == null) {
+          unregisterFromRestoration(_controller!);
+          _controller!.dispose();
+          _controller = null;
+        }
+      }
     }
 
-    if (oldWidget.initialValue != widget.initialValue) {
-      setValue(widget.initialValue);
-      _controller.value = widget.initialValue;
+    if (widget.focusNode != oldWidget.focusNode) {
+      oldWidget.focusNode?.removeListener(_focusListener);
+      if (oldWidget.focusNode != null && widget.focusNode == null) {
+        _createLocalFocusNode();
+      }
+      if (widget.focusNode != null) {
+        _focusNode
+          ?..removeListener(_focusListener)
+          ..dispose();
+        _controller = null;
+      }
+      if (widget.onFocusChanged != null) {
+        effectiveFocusNode.addListener(_focusListener);
+      }
     }
-    if (_widget.jsonKey != oldWidget.jsonKey) {
-      _controller.key = _widget.jsonKey;
+  }
+
+  @override
+  void dispose() {
+    effectiveFocusNode.removeListener(_focusListener);
+    _focusNode?.dispose();
+    widget.controller
+      ?.._detach(this)
+      ..removeListener(_handleControllerChanged);
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChange(T? value) {
+    if (this.value == value) return;
+    super.didChange(value);
+    widget.onChanged?.call(value);
+    final string = _asString(value);
+    if (effectiveController.text != string) {
+      effectiveController.text = string ?? '';
     }
+  }
+
+  @override
+  void reset() {
+    // Set the controller value before calling super.reset() to let
+    // _handleControllerChanged suppress the change.
+    effectiveController.text = _asString(widget.initialValue) ?? '';
+    super.reset();
+    widget.onChanged?.call(widget.initialValue);
+  }
+
+  void _handleControllerChanged() {
+    // Suppress changes that originated from within this class.
+    //
+    // In the case where a controller has been passed in to this widget, we
+    // register this change listener. In these cases, we'll also receive change
+    // notifications for changes originating from within this class -- for
+    // example, the reset() method. In such cases, the FormField value will
+    // already have been set.
+    if (effectiveController.text != _asString(value)) {
+      didChange(_toValue(effectiveController.text));
+    }
+  }
+
+  /// TextField onChanged handler
+  void _onChangedHandler(String value) {
+    didChange(_toValue(value));
+  }
+
+  @override
+  void setValue(T? value) {
+    super.setValue(value);
   }
 
   @override
@@ -1160,77 +1364,69 @@ class SimpleFieldState<T> extends FormFieldState<T> {
   }
 
   @override
-  void dispose() {
-    _controller.removeListener(_listenController);
-    if (_widget.controller == null) {
-      _controller.dispose();
-    }
-    for (final element in _widget.listenables) {
-      element.removeListener(() => _listenListenable(element));
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     SimpleForm.maybeOf(context)?._register(this);
-
-    final theme = Theme.of(context);
-    final enabled =
-        widget.enabled ? _widget.listenables.hasValue : widget.enabled;
-
-    final border = _widget.decoration?.border ??
-        OutlineInputBorder(
-          borderSide: BorderSide(
-            width: 0.5,
-            color: theme.colorScheme.onBackground,
-          ),
-          borderRadius: BorderRadius.circular(10),
-        );
+    var child = super.build(context);
+    // final enabled =
+    //     widget.enabled ? widget.listenables.hasValue : widget.enabled;
+    final enabled = widget.enabled;
+    final border = widget.decoration?.border ?? const OutlineInputBorder();
     final errorStyle = enabled
         ? null
         : const TextStyle(height: 0.01, color: Colors.transparent);
 
-    var decoration = _widget.decoration ?? const InputDecoration();
-
     final floatingLabelBehavior =
-        decoration.floatingLabelBehavior ?? FloatingLabelBehavior.auto;
+        widget.decoration?.floatingLabelBehavior ?? FloatingLabelBehavior.auto;
 
-    final label = _widget.labelText ??
-        _widget.decoration?.labelText ??
-        _widget.jsonKey?.camelCaseToTitle;
+    final label = widget.labelText ??
+        widget.decoration?.labelText ??
+        widget.jsonKey?.camelCaseToTitle;
 
-    decoration = decoration
-        .copyWith(
-          labelText: floatingLabelBehavior.canFloat ? label : null,
-          hintText: _widget.decoration?.hintText ?? _widget.hintText ?? label,
-          errorText: _widget.decoration?.errorText ?? errorText,
-          enabled: enabled,
-          fillColor: decoration.fillColor ?? Colors.transparent,
-          border: decoration.border ?? border,
-          enabledBorder: decoration.enabledBorder ?? border,
-          focusedBorder: decoration.focusedBorder ??
-              border.withColor(theme.colorScheme.secondary),
-          errorBorder: decoration.errorBorder ??
-              border.withColor(theme.colorScheme.error),
-          disabledBorder: decoration.disabledBorder ??
-              border.withColor(theme.disabledColor),
-          contentPadding: decoration.contentPadding ??
-              const EdgeInsets.symmetric(horizontal: 12),
-          errorStyle: decoration.errorStyle ?? errorStyle,
-          floatingLabelBehavior: floatingLabelBehavior,
-        )
-        .applyDefaults(Theme.of(context).inputDecorationTheme);
+// && widget.readOnly
+    if (widget.enabled) {
+      child = CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.tab):
+              FocusScope.of(context).nextFocus,
+          // const SingleActivator(LogicalKeyboardKey.arrowRight):
+          //     FocusScope.of(context).nextFocus,
+          // const SingleActivator(LogicalKeyboardKey.arrowDown):
+          //     FocusScope.of(context).nextFocus,
+          const SingleActivator(LogicalKeyboardKey.tab, shift: true):
+              FocusScope.of(context).previousFocus,
+          // const SingleActivator(LogicalKeyboardKey.arrowUp):
+          //     FocusScope.of(context).previousFocus,
+          // const SingleActivator(LogicalKeyboardKey.arrowLeft):
+          //     FocusScope.of(context).previousFocus,
+          if (widget.onTap != null)
+            const SingleActivator(LogicalKeyboardKey.enter): widget.onTap!,
+        },
+        child: child,
+      );
+    }
 
-    final child = _LabelBuilder(
-      floatingLabel: floatingLabelBehavior.canFloat,
-      label: _widget.decoration?.label,
-      labelText: label,
-      child: super.build(context),
-    );
+    if (widget.onHover != null) {
+      child = MouseRegion(
+        onEnter: (event) => widget.onHover?.call(true),
+        onExit: (event) => widget.onHover?.call(false),
+        child: child,
+      );
+    }
 
     return DefaultInputDecoration(
-      decoration: decoration,
+      decoration: (widget.decoration ?? const InputDecoration())
+          .copyWith(
+            labelText: floatingLabelBehavior.canFloat ? label : null,
+            hintText: widget.decoration?.hintText ?? widget.hintText,
+            errorText: widget.decoration?.errorText ?? errorText,
+            enabled: enabled,
+            border: widget.decoration?.border ?? border,
+            contentPadding: widget.decoration?.contentPadding ??
+                const EdgeInsets.symmetric(horizontal: 12),
+            errorStyle: widget.decoration?.errorStyle ?? errorStyle,
+            floatingLabelBehavior: floatingLabelBehavior,
+          )
+          .applyDefaults(Theme.of(context).inputDecorationTheme),
       child: child,
     );
   }
@@ -1246,10 +1442,66 @@ class _FormScope extends InheritedWidget {
   final SimpleFormState _formState;
 
   /// The [SimpleForm] associated with this widget.
-  SimpleForm get form => _formState.widget as SimpleForm;
+  SimpleForm get form => _formState.widget;
 
   @override
   bool updateShouldNotify(_FormScope old) => false;
+}
+
+///
+class SimpleFieldController<T> extends TextEditingController {
+  ///
+  SimpleFieldController({super.text});
+
+  /// Creates a controller for an simple field from an initial [TextEditingValue].
+  ///
+  /// This constructor treats a null [value] argument as if it were
+  /// [TextEditingValue.empty].
+  SimpleFieldController.fromValue(TextEditingValue? value)
+      : super.fromValue(value ?? TextEditingValue.empty);
+
+  SimpleFieldState<T>? _client;
+
+  /// Set serializer
+  ValueSerializer<T>? get serializer => _client?.widget.serializer;
+
+  void _attach(SimpleFieldState<T> client) {
+    assert(_client == null, '');
+    _client = client;
+  }
+
+  void _detach(SimpleFieldState<T> client) {
+    assert(_client == client, '');
+    _client = null;
+  }
+
+  ///
+  T get data => dataOrNull!;
+
+  ///
+  T? get dataOrNull => _client?.value;
+
+  ///
+  dynamic get jsonValue => serializer?.jsonValueConverter(data);
+
+  ///
+  String? get keyOrNull => _client?.widget.jsonKey;
+
+  ///
+  String get key => keyOrNull!;
+
+  // ///
+  // MapEntry<String, dynamic> get entry =>
+  //     MapEntry(_key!, serializer.jsonValueConverter(data));
+
+  // ///
+  // MapEntry<String, dynamic>? get entryOrNull => hasEntry ? entry : null;
+
+  // ///
+  // bool get hasEntry => hasValue && hasKey;
+
+  // ///
+  // bool get hasKey => _key != null;
 }
 
 ///
@@ -1298,58 +1550,6 @@ class DefaultInputDecoration extends InheritedWidget {
       oldWidget.decoration != decoration;
 }
 
-///
-class _LabelBuilder extends StatelessWidget {
-  ///
-  const _LabelBuilder({
-    required this.floatingLabel,
-    required this.labelText,
-    required this.label,
-    required this.child,
-  });
-
-  ///
-  final bool floatingLabel;
-
-  ///
-  final String? labelText;
-
-  ///
-  final Widget? label;
-
-  ///
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!floatingLabel && (label != null || labelText != null)) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Label
-          if (label != null)
-            label!
-          else ...[
-            Text(labelText ?? 'Label'),
-            const SizedBox(height: 8),
-          ],
-          child,
-        ],
-      );
-    }
-
-    return child;
-  }
-}
-
-extension on InputBorder {
-  InputBorder withColor(Color? color) {
-    if (color == null) return this;
-    return copyWith(borderSide: borderSide.copyWith(color: color));
-  }
-}
-
 extension on FloatingLabelBehavior {
   bool get canFloat => this != FloatingLabelBehavior.never;
 }
@@ -1360,42 +1560,33 @@ extension SimpleFormBuildContextX on BuildContext {
   SimpleFormState? get simpleForm => SimpleForm.maybeOf(this);
 }
 
-extension on InputDecoration {
-  InputDecorationTheme get toTheme {
-    return InputDecorationTheme(
-      labelStyle: labelStyle,
-      floatingLabelStyle: floatingLabelStyle,
-      helperStyle: helperStyle,
-      helperMaxLines: helperMaxLines,
-      hintStyle: hintStyle,
-      hintFadeDuration: hintFadeDuration,
-      errorStyle: errorStyle,
-      errorMaxLines: errorMaxLines,
-      floatingLabelBehavior:
-          floatingLabelBehavior ?? FloatingLabelBehavior.auto,
-      floatingLabelAlignment:
-          floatingLabelAlignment ?? FloatingLabelAlignment.start,
-      isDense: isDense ?? false,
-      contentPadding: contentPadding,
-      isCollapsed: isCollapsed ?? false,
-      iconColor: iconColor,
-      prefixStyle: prefixStyle,
-      prefixIconColor: prefixIconColor,
-      suffixStyle: suffixStyle,
-      suffixIconColor: suffixIconColor,
-      counterStyle: counterStyle,
-      filled: filled ?? false,
-      fillColor: fillColor,
-      focusColor: focusColor,
-      hoverColor: hoverColor,
-      errorBorder: errorBorder,
-      focusedBorder: focusedBorder,
-      focusedErrorBorder: focusedErrorBorder,
-      disabledBorder: disabledBorder,
-      enabledBorder: enabledBorder,
-      border: border,
-      alignLabelWithHint: alignLabelWithHint ?? false,
-      constraints: constraints,
-    );
+extension on String {
+  /// Convert camelCase string into title `Camel Case`
+  String get camelCaseToTitle {
+    if (isEmpty) return this;
+
+    final buffer = StringBuffer(this[0].toUpperCase());
+
+    for (var i = 1; i < length; i++) {
+      final char = this[i];
+      if (char.toUpperCase() == char) {
+        buffer.write(' ');
+      }
+      buffer.write(char);
+    }
+
+    return buffer.toString();
+  }
+
+  ///
+  bool get toBool {
+    switch (toLowerCase()) {
+      case 'true' || '1':
+        return true;
+      case 'false' || '0':
+        return false;
+      default:
+        return false;
+    }
   }
 }

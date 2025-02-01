@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:developer';
 
+import 'package:collection/collection.dart';
+import 'package:collection_view/collection_view.dart';
+import 'package:equatable/equatable.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:simple_utils/simple_utils.dart';
 
 ///
-class CountryRepository extends BaseChangeNotifier {
+class CountryRepository extends Controller {
   ///
   CountryRepository._();
 

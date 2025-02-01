@@ -2,7 +2,7 @@
 // ignore_for_file: public_member_api_docs
 
 import 'package:flutter/material.dart';
-import 'package:simple_utils/simple_utils.dart' as su;
+import 'package:intl/intl.dart' hide TextDirection;
 
 import '../simple_form.dart';
 
@@ -108,7 +108,7 @@ class SimpleDatePicker {
   final ValueChanged<DatePickerEntryMode>? onDatePickerModeChange;
   final Icon? switchToInputEntryModeIcon;
   final Icon? switchToCalendarEntryModeIcon;
-  final su.DateFormat? dateFormat;
+  final DateFormat? dateFormat;
 
   ///
   Future<DateTime?> open(BuildContext context) async {
