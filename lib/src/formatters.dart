@@ -370,28 +370,320 @@ class CreditCardNumberInputFormatter extends TextInputFormatter {
   }
 }
 
-// ///
-// class ExpiryDateInputFormatter extends TextInputFormatter {
-//   ///
-//   const ExpiryDateInputFormatter();
+///
+class ExpiryDateInputFormatter extends TextInputFormatter {
+  ///
+  const ExpiryDateInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.length > 7) return oldValue;
+
+    var newText = newValue.text.replaceAll(RegExp('[^0-9]'), '');
+
+    if (newText.length > 2) {
+      newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
+    }
+
+    return TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+  }
+}
+
+// class DateFormatInputFormatter extends TextInputFormatter {
+//   DateFormatInputFormatter(this.dateFormat) {
+//     _parsePattern();
+//   }
+
+//   final DateFormat dateFormat;
+//   late final List<String> components;
+//   late final List<String> separators;
+//   late final List<int> componentLengths;
+
+//   void _parsePattern() {
+//     String pattern = dateFormat.pattern!;
+//     List<String> tokens = _splitPattern(pattern);
+//     components = [];
+//     separators = [];
+//     StringBuffer currentSeparator = StringBuffer();
+
+//     for (String token in tokens) {
+//       if (_isComponent(token)) {
+//         components.add(token);
+//         if (components.length > 1) {
+//           separators.add(currentSeparator.toString());
+//           currentSeparator.clear();
+//         }
+//       } else {
+//         currentSeparator.write(token);
+//       }
+//     }
+
+//     // Add the last separator if there is any
+//     if (currentSeparator.isNotEmpty) {
+//       separators.add(currentSeparator.toString());
+//     }
+
+//     componentLengths = components.map((c) => c.length).toList();
+//   }
+
+//   List<String> _splitPattern(String pattern) {
+//     RegExp exp = RegExp(r'([a-zA-Z]+)|([^a-zA-Z]+)');
+//     Iterable<Match> matches = exp.allMatches(pattern);
+//     List<String> tokens = [];
+//     for (Match m in matches) {
+//       String token = m.group(0)!;
+//       tokens.add(token);
+//     }
+//     return tokens;
+//   }
+
+//   bool _isComponent(String token) {
+//     if (token.isEmpty) return false;
+//     return token[0].contains(RegExp(r'[a-zA-Z]'));
+//   }
 
 //   @override
 //   TextEditingValue formatEditUpdate(
 //     TextEditingValue oldValue,
 //     TextEditingValue newValue,
 //   ) {
-//     if (newValue.text.length > 7) return oldValue;
+//     if (newValue.text.isEmpty) return newValue;
 
-//     var newText = newValue.text.replaceAll(RegExp('[^0-9]'), '');
+//     // Get clean digits and previous digits
+//     final String oldText = oldValue.text;
+//     final String newText = newValue.text;
 
-//     if (newText.length > 2) {
-//       newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
-//     }
+//     final String oldDigits = oldText.replaceAll(RegExp(r'[^0-9]'), '');
+//     final String newDigits = newText.replaceAll(RegExp(r'[^0-9]'), '');
+
+//     // Calculate actual inserted/deleted digits
+//     final int digitsBefore =
+//         _countDigitsUpTo(oldText, oldValue.selection.start);
+//     final int digitsAfter = _countDigitsUpTo(newText, newValue.selection.start);
+//     final int digitDifference = digitsAfter - digitsBefore;
+
+//     // Build formatted text
+//     final formatted = _formatDigits(newDigits);
+//     if (formatted == newValue.text) return newValue;
+
+//     // Calculate new cursor position
+//     int newOffset = _calculateCursorPosition(
+//       formatted,
+//       newDigits,
+//       digitsBefore + digitDifference,
+//     );
 
 //     return TextEditingValue(
-//       text: newText,
-//       selection: TextSelection.collapsed(offset: newText.length),
+//       text: formatted,
+//       selection: TextSelection.collapsed(offset: newOffset),
 //     );
+//   }
+
+//   // String _formatDigits(String digits) {
+//   //   final buffer = StringBuffer();
+//   //   int start = 0;
+
+//   //   for (int i = 0; i < components.length; i++) {
+//   //     if (start >= digits.length) break;
+
+//   //     final end = start + componentLengths[i];
+//   //     final part = digits.substring(start, end.clamp(start, digits.length));
+//   //     buffer.write(part);
+
+//   //     if (i < separators.length && part.length == componentLengths[i]) {
+//   //       buffer.write(separators[i]);
+//   //     }
+
+//   //     start = end;
+//   //   }
+
+//   //   return buffer.toString().replaceAll(RegExp(r'\D$'), '');
+//   // }
+
+//   String _formatDigits(String digits) {
+//     final buffer = StringBuffer();
+//     int start = 0;
+
+//     // Calculate maximum allowed digits based on pattern
+//     final maxDigits = componentLengths.reduce((a, b) => a + b);
+//     final trimmedDigits =
+//         digits.length > maxDigits ? digits.substring(0, maxDigits) : digits;
+
+//     for (int i = 0; i < components.length; i++) {
+//       if (start >= trimmedDigits.length) break;
+
+//       final end = start + componentLengths[i];
+//       final part = trimmedDigits.substring(
+//           start, end.clamp(start, trimmedDigits.length));
+//       buffer.write(part);
+
+//       if (i < separators.length && part.length == componentLengths[i]) {
+//         buffer.write(separators[i]);
+//       }
+
+//       start = end;
+//     }
+
+//     return buffer.toString().replaceAll(RegExp(r'\D$'), '');
+//   }
+
+//   int _calculateCursorPosition(
+//       String formatted, String digits, int targetDigits) {
+//     int digitCount = 0;
+//     int cursorPos = 0;
+
+//     while (cursorPos < formatted.length && digitCount < targetDigits) {
+//       if (formatted.codeUnitAt(cursorPos) >= 48 &&
+//           formatted.codeUnitAt(cursorPos) <= 57) {
+//         digitCount++;
+//       }
+//       cursorPos++;
+//     }
+
+//     // Skip over next separator if needed
+//     if (cursorPos < formatted.length &&
+//         !isDigit(formatted[cursorPos]) &&
+//         digitCount == digits.length) {
+//       cursorPos++;
+//     }
+
+//     return cursorPos;
+//   }
+
+//   int _countDigitsUpTo(String text, int offset) {
+//     int count = 0;
+//     for (int i = 0; i < offset && i < text.length; i++) {
+//       if (isDigit(text[i])) {
+//         count++;
+//       }
+//     }
+//     return count;
+//   }
+
+//   bool isDigit(String s) {
+//     if (s.isEmpty) return false;
+//     return s.codeUnitAt(0) >= 48 && s.codeUnitAt(0) <= 57;
+//   }
+// }
+
+// class DateFormatInputFormatter extends TextInputFormatter {
+//   DateFormatInputFormatter(this.dateFormat) {
+//     _parsePattern();
+//   }
+
+//   final DateFormat dateFormat;
+//   late final List<String> components;
+//   late final List<String> separators;
+//   late final List<int> componentLengths;
+
+//   void _parsePattern() {
+//     String pattern = dateFormat.pattern!;
+//     List<String> tokens = _splitPattern(pattern);
+//     components = [];
+//     separators = [];
+//     StringBuffer currentSeparator = StringBuffer();
+
+//     for (String token in tokens) {
+//       if (_isComponent(token)) {
+//         components.add(token);
+//         if (components.length > 1) {
+//           separators.add(currentSeparator.toString());
+//           currentSeparator.clear();
+//         }
+//       } else {
+//         currentSeparator.write(token);
+//       }
+//     }
+
+//     componentLengths = components.map((c) => c.length).toList();
+//   }
+
+//   List<String> _splitPattern(String pattern) {
+//     RegExp exp = RegExp(r'([a-zA-Z]+)|([^a-zA-Z]+)');
+//     Iterable<Match> matches = exp.allMatches(pattern);
+//     List<String> tokens = [];
+//     for (Match m in matches) {
+//       String token = m.group(0)!;
+//       tokens.add(token);
+//     }
+//     return tokens;
+//   }
+
+//   bool _isComponent(String token) {
+//     if (token.isEmpty) return false;
+//     return token[0].contains(RegExp(r'[a-zA-Z]'));
+//   }
+
+//   @override
+//   TextEditingValue formatEditUpdate(
+//     TextEditingValue oldValue,
+//     TextEditingValue newValue,
+//   ) {
+//     String newText = newValue.text;
+//     String digits = newText.replaceAll(RegExp(r'[^0-9]'), '');
+//     List<String> groups = [];
+//     int start = 0;
+
+//     for (int length in componentLengths) {
+//       if (start >= digits.length) break;
+//       int end = start + length;
+//       end = end.clamp(start, digits.length);
+//       groups.add(digits.substring(start, end));
+//       start = end;
+//     }
+
+//     StringBuffer formattedText = StringBuffer();
+//     for (int i = 0; i < groups.length; i++) {
+//       formattedText.write(groups[i]);
+//       if (i < separators.length && i < groups.length - 1) {
+//         formattedText.write(separators[i]);
+//       }
+//     }
+
+//     String formattedString = formattedText.toString();
+
+//     int originalDigitCount =
+//         _countDigitsUpTo(newValue.text, newValue.selection.extentOffset);
+//     int newOffset = _calculateNewOffset(formattedString, originalDigitCount);
+
+//     return TextEditingValue(
+//       text: formattedString,
+//       selection: TextSelection.collapsed(offset: newOffset),
+//     );
+//   }
+
+//   int _countDigitsUpTo(String text, int offset) {
+//     int count = 0;
+//     for (int i = 0; i < offset && i < text.length; i++) {
+//       if (isDigit(text[i])) {
+//         count++;
+//       }
+//     }
+//     return count;
+//   }
+
+//   int _calculateNewOffset(String formattedText, int originalDigitCount) {
+//     int newOffset = 0;
+//     int currentDigitCount = 0;
+//     while (newOffset < formattedText.length &&
+//         currentDigitCount < originalDigitCount) {
+//       if (isDigit(formattedText[newOffset])) {
+//         currentDigitCount++;
+//       }
+//       newOffset++;
+//     }
+//     return newOffset;
+//   }
+
+//   bool isDigit(String s) {
+//     if (s.isEmpty) return false;
+//     return s.codeUnitAt(0) >= 48 && s.codeUnitAt(0) <= 57;
 //   }
 // }
 

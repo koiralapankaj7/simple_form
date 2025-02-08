@@ -47,10 +47,10 @@
 //   bool _isHovering = false;
 //   bool _isActive = false;
 
-//   Set<MaterialState> get _materialState {
-//     return <MaterialState>{
-//       if (_isHovering) MaterialState.hovered,
-//       if (_node.hasFocus) MaterialState.focused,
+//   Set<WidgetState> get _materialState {
+//     return <WidgetState>{
+//       if (_isHovering) WidgetState.hovered,
+//       if (_node.hasFocus) WidgetState.focused,
 //     };
 //   }
 
@@ -91,49 +91,28 @@
 
 //   @override
 //   Widget build(BuildContext context) {
-//     final effectiveMouseCursor = MaterialStateProperty.resolveAs<MouseCursor>(
-//       MaterialStateMouseCursor.clickable,
-//       _materialState,
-//     );
-
-//     return Focus(
+//     return InkWell(
 //       focusNode: _node,
-//       onKey: !widget.enabled
+//       canRequestFocus: false,
+//       overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+//       onTap: !widget.enabled || widget.onPressed == null
 //           ? null
-//           : (node, event) {
-//               if (!_isActive && event.logicalKey == LogicalKeyboardKey.enter) {
-//                 _onPressed();
-//               }
-//               return KeyEventResult.ignored;
+//           : () async {
+//               _node.requestFocus();
+//               _onPressed();
 //             },
-//       onFocusChange: widget.onFocusChanged,
-//       child: MouseRegion(
-//         cursor: effectiveMouseCursor,
-//         onEnter: (PointerEnterEvent event) => _handleHover(true),
-//         onExit: (PointerExitEvent event) => _handleHover(false),
-//         child: InkWell(
-//           canRequestFocus: false,
-//           overlayColor: const MaterialStatePropertyAll(Colors.transparent),
-//           onTap: !widget.enabled || widget.onPressed == null
-//               ? null
-//               : () async {
-//                   _node.requestFocus();
-//                   _onPressed();
-//                 },
-//           child: AnimatedBuilder(
-//             animation: _node,
-//             builder: (context, child) {
-//               return InputDecorator(
-//                 decoration: widget.decoration,
-//                 isHovering: _isHovering,
-//                 isFocused: _node.hasFocus,
-//                 isEmpty: widget.isEmpty,
-//                 child: child,
-//               );
-//             },
-//             child: widget.child,
-//           ),
-//         ),
+//       child: AnimatedBuilder(
+//         animation: _node,
+//         builder: (context, child) {
+//           return InputDecorator(
+//             decoration: widget.decoration,
+//             isHovering: _isHovering,
+//             isFocused: _node.hasFocus,
+//             isEmpty: widget.isEmpty,
+//             child: child,
+//           );
+//         },
+//         child: widget.child,
 //       ),
 //     );
 //   }

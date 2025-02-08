@@ -340,7 +340,67 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
+    FormFieldSetter<String>? onSaved,
+    FormFieldSetter<String>? onSubmitted,
+    bool enabled = true,
+    bool? autoFocus,
+    FocusNode? focusNode,
+    int? minLines,
+    int? maxLines,
+    String? restorationId,
+    Iterable<String>? autofillHints,
+    List<TextInputFormatter>? inputFormatters,
+    TextInputAction? textInputAction,
+    TapRegionCallback? onTapOutside,
+    Key? key,
+  }) =>
+      SimpleField<String>(
+        jsonKey: jsonKey,
+        autovalidateMode: autovalidateMode,
+        controller: controller,
+        focusNode: focusNode,
+        enabled: enabled,
+        initialValue: initialValue,
+        isRequired: isRequired,
+        labelText: labelText,
+        hintText: hintText,
+        onChanged: onChanged,
+        onSaved: onSaved,
+        restorationId: restorationId,
+        validator: validator,
+        decoration: decoration,
+        key: key,
+        builder: (context, field) {
+          return TextField(
+            controller: field.effectiveController,
+            focusNode: field.effectiveFocusNode,
+            onChanged: field._onChangedHandler,
+            autofocus: autoFocus ?? false,
+            restorationId: restorationId,
+            decoration: DefaultInputDecoration.of(context),
+            autofillHints: autofillHints,
+            inputFormatters: inputFormatters,
+            textInputAction: textInputAction ?? TextInputAction.next,
+            minLines: minLines,
+            maxLines: maxLines,
+            onTapOutside: onTapOutside,
+            onSubmitted: onSubmitted,
+          );
+        },
+      );
+
+  ///
+  static SimpleField<String> email({
+    String? jsonKey,
+    AutovalidateMode? autovalidateMode,
+    String? initialValue,
+    FormFieldValidator<String>? validator,
+    bool isRequired = false,
+    String? labelText,
+    String? hintText,
+    InputDecoration? decoration,
+    SimpleFieldController<String>? controller,
+    ValueChanged<String?>? onChanged,
     FormFieldSetter<String>? onSaved,
     FormFieldSetter<String>? onSubmitted,
     bool enabled = true,
@@ -381,6 +441,7 @@ class SimpleField<T> extends FormField<T> {
             autofillHints: autofillHints,
             inputFormatters: inputFormatters,
             textInputAction: textInputAction ?? TextInputAction.next,
+            keyboardType: TextInputType.emailAddress,
             minLines: 1,
             maxLines: maxLines,
             onTapOutside: onTapOutside,
@@ -388,8 +449,6 @@ class SimpleField<T> extends FormField<T> {
           );
         },
       );
-
-// textArea,email,
 
   ///
   static SimpleField<String> password({
@@ -404,7 +463,6 @@ class SimpleField<T> extends FormField<T> {
     SimpleFieldController<String>? controller,
     FocusNode? focusNode,
     ValueChanged<String?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -496,7 +554,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<int>? controller,
     ValueChanged<int?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<int>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -582,7 +639,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<Country>? controller,
     ValueChanged<Country?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<Country>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -658,7 +714,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -705,7 +760,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -748,82 +802,26 @@ class SimpleField<T> extends FormField<T> {
       );
 
   ///
-  static SimpleField<int> number({
+  static SimpleField<num> number({
     String? jsonKey,
     AutovalidateMode? autovalidateMode,
-    int? initialValue,
-    FormFieldValidator<int>? validator,
+    num? initialValue,
+    FormFieldValidator<num>? validator,
     bool isRequired = false,
     String? labelText,
     String? hintText,
     InputDecoration? decoration,
-    SimpleFieldController<int>? controller,
-    ValueChanged<int?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
-    FormFieldSetter<int>? onSaved,
+    SimpleFieldController<num>? controller,
+    ValueChanged<num?>? onChanged,
+    FormFieldSetter<num>? onSaved,
     bool enabled = true,
     String? restorationId,
-    (int min, int max)? range,
-    TextInputAction? textInputAction,
-    Key? key,
-  }) =>
-      SimpleField<int>(
-        jsonKey: jsonKey,
-        autovalidateMode: autovalidateMode,
-        controller: controller,
-        decoration: decoration,
-        enabled: enabled,
-        initialValue: initialValue,
-        isRequired: isRequired,
-        labelText: labelText,
-        hintText: hintText,
-        onChanged: onChanged,
-        onSaved: onSaved,
-        restorationId: restorationId,
-        validator: validator ??
-            (value) =>
-                isRequired && (value ?? 0) <= 0 ? 'Required field' : null,
-        key: key,
-        builder: (context, field) {
-          return TextField(
-            controller: field.effectiveController,
-            focusNode: field.effectiveFocusNode,
-            onChanged: field._onChangedHandler,
-            restorationId: restorationId,
-            decoration: DefaultInputDecoration.of(context),
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              // Allow numbers only
-              FilteringTextInputFormatter.digitsOnly,
-              if (range != null) SimpleInputFormatter.enforcedRange(range),
-            ],
-            textInputAction: textInputAction ?? TextInputAction.next,
-          );
-        },
-      );
-
-  ///
-  static SimpleField<double> amount({
-    String? jsonKey,
-    AutovalidateMode? autovalidateMode,
-    double? initialValue,
-    FormFieldValidator<double>? validator,
-    bool isRequired = false,
-    String? labelText,
-    String? hintText,
-    InputDecoration? decoration,
-    SimpleFieldController<double>? controller,
-    ValueChanged<double?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
-    FormFieldSetter<double>? onSaved,
-    bool enabled = true,
-    String? restorationId,
-    (double min, double max)? range,
+    (num min, num max)? range,
     int decimalPlace = 2,
     TextInputAction? textInputAction,
     Key? key,
   }) =>
-      SimpleField<double>(
+      SimpleField<num>(
         jsonKey: jsonKey,
         autovalidateMode: autovalidateMode,
         controller: controller,
@@ -837,8 +835,9 @@ class SimpleField<T> extends FormField<T> {
         onSaved: onSaved,
         restorationId: restorationId,
         validator: validator ??
-            (value) =>
-                isRequired && (value ?? 0) <= 0 ? 'Required field' : null,
+            (value) {
+              return isRequired && (value ?? 0) <= 0 ? 'Required field' : null;
+            },
         key: key,
         builder: (context, field) {
           return TextField(
@@ -849,7 +848,10 @@ class SimpleField<T> extends FormField<T> {
             decoration: DefaultInputDecoration.of(context),
             keyboardType: TextInputType.number,
             inputFormatters: [
-              SimpleInputFormatter.enforcedDecimalPlace(decimalPlace),
+              if (decimalPlace > 0)
+                SimpleInputFormatter.enforcedDecimalPlace(decimalPlace)
+              else
+                FilteringTextInputFormatter.digitsOnly,
               if (range != null) SimpleInputFormatter.enforcedRange(range),
             ],
             textInputAction: textInputAction ?? TextInputAction.next,
@@ -869,7 +871,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<DateTime>? controller,
     ValueChanged<DateTime?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<DateTime>? onSaved,
     bool enabled = true,
     bool editable = false,
@@ -966,7 +967,6 @@ class SimpleField<T> extends FormField<T> {
     InputDecoration? decoration,
     SimpleFieldController<String>? controller,
     ValueChanged<String?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<String>? onSaved,
     bool enabled = true,
     String? restorationId,
@@ -1027,7 +1027,7 @@ class SimpleField<T> extends FormField<T> {
   //   InputDecoration? decoration,
   //   SimpleFieldController<T>? controller,
   //   ValueChanged<T?>? onChanged,
-  //   ValueChanged<Listenable>? onListenableChanged,
+  //
   //   FormFieldSetter<T>? onSaved,
   //   bool enabled = true,
   //   String? restorationId,
@@ -1095,86 +1095,38 @@ class SimpleField<T> extends FormField<T> {
   //     );
 
   ///
-  static SimpleField<bool> switchBox({
-    required String label,
+  static SimpleField<bool> boolean({
+    String? labelText,
+    SimpleFieldStateBuilder<bool>? builder,
     String? jsonKey,
     AutovalidateMode? autovalidateMode,
     bool? initialValue,
     FormFieldValidator<bool>? validator,
-    bool isRequired = false,
     SimpleFieldController<bool>? controller,
     ValueChanged<bool?>? onChanged,
-    ValueChanged<Listenable>? onListenableChanged,
     FormFieldSetter<bool>? onSaved,
     bool enabled = true,
     String? restorationId,
     EdgeInsetsGeometry? padding,
     TextStyle? labelStyle,
     bool isCollapsed = false,
+    InputDecoration? decoration,
     Key? key,
   }) =>
-      SimpleField<bool>(
+      _BooleanField(
         jsonKey: jsonKey,
+        labelText: labelText,
         autovalidateMode: autovalidateMode,
         controller: controller,
-        decoration: InputDecoration(
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          errorBorder: InputBorder.none,
-          disabledBorder: InputBorder.none,
-          floatingLabelBehavior: FloatingLabelBehavior.auto,
-          contentPadding: padding,
-          labelStyle: labelStyle,
-          isCollapsed: isCollapsed,
-        ),
+        decoration: decoration,
         enabled: enabled,
         initialValue: initialValue,
-        isRequired: isRequired,
         onChanged: onChanged,
         onSaved: onSaved,
         restorationId: restorationId,
         validator: validator,
+        builder: builder,
         key: key,
-        builder: (context, field) {
-          // final decor = DefaultInputDecoration.of(context);
-          return Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              label,
-              style: labelStyle ?? Theme.of(context).textTheme.bodyMedium,
-            ),
-          );
-          // return FieldFocus(
-          //   isEmpty: true,
-          //   enabled: false,
-          //   decoration: decor.copyWith(
-          //     // hintText: label,
-          //     // hintStyle:
-          //     //     decor.labelStyle ?? Theme.of(context).textTheme.bodyLarge,
-          //     suffixIconConstraints: BoxConstraints.tight(
-          //       Size(40.0 + decor.contentPadding.right, 20),
-          //     ),
-          //     suffixIcon: Padding(
-          //       padding: EdgeInsets.only(right: decor.contentPadding.right),
-          //       child: FittedBox(
-          //         fit: BoxFit.fitWidth,
-          //         child: CupertinoSwitch(
-          //           value: field.value ?? false,
-          //           onChanged: field.didChange,
-          //         ),
-          //       ),
-          //     ),
-          //   ),
-          //   child: Align(
-          //     alignment: Alignment.centerLeft,
-          //     child: Text(
-          //       label,
-          //       style: labelStyle ?? Theme.of(context).textTheme.bodyMedium,
-          //     ),
-          //   ),
-          // );
-        },
       );
 
   @override
@@ -1363,14 +1315,11 @@ class SimpleFieldState<T> extends FormFieldState<T> {
     super.deactivate();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    SimpleForm.maybeOf(context)?._register(this);
-    var child = super.build(context);
+  ///
+  InputDecoration buildDecoration(BuildContext context) {
     // final enabled =
     //     widget.enabled ? widget.listenables.hasValue : widget.enabled;
     final enabled = widget.enabled;
-    final border = widget.decoration?.border ?? const OutlineInputBorder();
     final errorStyle = enabled
         ? null
         : const TextStyle(height: 0.01, color: Colors.transparent);
@@ -1382,9 +1331,36 @@ class SimpleFieldState<T> extends FormFieldState<T> {
         widget.decoration?.labelText ??
         widget.jsonKey?.camelCaseToTitle;
 
-// && widget.readOnly
+    return (widget.decoration ?? const InputDecoration())
+        .copyWith(
+          labelText: floatingLabelBehavior.canFloat ? label : null,
+          hintText: widget.decoration?.hintText ?? widget.hintText,
+          errorText: widget.decoration?.errorText ?? errorText,
+          enabled: enabled,
+          border: widget.decoration?.border ?? const OutlineInputBorder(),
+          errorStyle: widget.decoration?.errorStyle ?? errorStyle,
+          floatingLabelBehavior: floatingLabelBehavior,
+        )
+        .applyDefaults(Theme.of(context).inputDecorationTheme);
+  }
+
+  ///
+  Widget? buildMouseRegion(BuildContext context, Widget child) {
+    if (widget.onHover != null) {
+      return MouseRegion(
+        onEnter: (event) => widget.onHover?.call(true),
+        onExit: (event) => widget.onHover?.call(false),
+        child: child,
+      );
+    }
+    return null;
+  }
+
+  ///
+  Widget? buildShortcuts(BuildContext context, Widget child) {
+    // && widget.readOnly
     if (widget.enabled) {
-      child = CallbackShortcuts(
+      return CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
           const SingleActivator(LogicalKeyboardKey.tab):
               FocusScope.of(context).nextFocus,
@@ -1404,29 +1380,102 @@ class SimpleFieldState<T> extends FormFieldState<T> {
         child: child,
       );
     }
+    return null;
+  }
 
-    if (widget.onHover != null) {
-      child = MouseRegion(
-        onEnter: (event) => widget.onHover?.call(true),
-        onExit: (event) => widget.onHover?.call(false),
-        child: child,
-      );
+  @override
+  Widget build(BuildContext context) {
+    SimpleForm.maybeOf(context)?._register(this);
+    var child = super.build(context);
+
+    if (buildShortcuts(context, child) case final Widget shortcuts) {
+      child = shortcuts;
+    }
+
+    if (buildMouseRegion(context, child) case final Widget mouseRegion) {
+      child = mouseRegion;
     }
 
     return DefaultInputDecoration(
-      decoration: (widget.decoration ?? const InputDecoration())
-          .copyWith(
-            labelText: floatingLabelBehavior.canFloat ? label : null,
-            hintText: widget.decoration?.hintText ?? widget.hintText,
-            errorText: widget.decoration?.errorText ?? errorText,
-            enabled: enabled,
-            border: widget.decoration?.border ?? border,
-            contentPadding: widget.decoration?.contentPadding ??
-                const EdgeInsets.symmetric(horizontal: 12),
-            errorStyle: widget.decoration?.errorStyle ?? errorStyle,
-            floatingLabelBehavior: floatingLabelBehavior,
-          )
-          .applyDefaults(Theme.of(context).inputDecorationTheme),
+      decoration: buildDecoration(context),
+      child: child,
+    );
+  }
+}
+
+class _BooleanField extends SimpleField<bool> {
+  _BooleanField({
+    super.key,
+    super.jsonKey,
+    super.labelText,
+    super.autovalidateMode,
+    super.controller,
+    super.decoration,
+    super.enabled,
+    super.initialValue,
+    super.onChanged,
+    super.onSaved,
+    super.restorationId,
+    super.validator,
+    SimpleFieldStateBuilder<bool>? builder,
+  }) : super(
+          builder: (context, field) {
+            final boolFieldState = field as _BooleanFieldState;
+            final decor = DefaultInputDecoration.of(context);
+            final focusNode = field.effectiveFocusNode;
+            return AnimatedBuilder(
+              animation: focusNode,
+              builder: (context, child) {
+                return InputDecorator(
+                  decoration: decor.copyWith(
+                    hintText: decor.hintText ?? decor.labelText,
+                    floatingLabelBehavior: FloatingLabelBehavior.never,
+                    hintStyle: decor.labelStyle ??
+                        Theme.of(context).textTheme.bodyLarge,
+                    suffixIconConstraints: BoxConstraints.tight(
+                      Size(40.0 + decor.contentPadding.right, 20),
+                    ),
+                    suffixIcon: child,
+                  ),
+                  isHovering: boolFieldState._isHovering,
+                  isFocused: focusNode.hasFocus,
+                  isEmpty: true,
+                );
+              },
+              child: Padding(
+                padding: EdgeInsets.only(right: decor.contentPadding.right),
+                child: FittedBox(
+                  fit: BoxFit.fitWidth,
+                  child: builder?.call(context, field) ??
+                      Switch(
+                        focusNode: focusNode,
+                        value: field.value ?? false,
+                        onChanged: field.didChange,
+                      ),
+                ),
+              ),
+            );
+          },
+        );
+
+  @override
+  SimpleFieldState<bool> createState() => _BooleanFieldState();
+}
+
+class _BooleanFieldState extends SimpleFieldState<bool> {
+  bool _isHovering = false;
+
+  void _onHover(bool isHovering) {
+    _isHovering = isHovering;
+    widget.onHover?.call(isHovering);
+    setState(() {});
+  }
+
+  @override
+  Widget? buildMouseRegion(BuildContext context, Widget child) {
+    return MouseRegion(
+      onEnter: (event) => _onHover(true),
+      onExit: (event) => _onHover(false),
       child: child,
     );
   }
@@ -1589,4 +1638,35 @@ extension on String {
         return false;
     }
   }
+}
+
+///
+extension on EdgeInsetsGeometry? {
+  // ///
+  // double get left => switch (this) {
+  //       EdgeInsets(:final double left) => left,
+  //       EdgeInsetsDirectional(:final double start) => start,
+  //       _ => 0.0,
+  //     };
+
+  // ///
+  // double get top => switch (this) {
+  //       EdgeInsets(:final double top) => top,
+  //       EdgeInsetsDirectional(:final double top) => top,
+  //       _ => 0.0,
+  //     };
+
+  ///
+  double get right => switch (this) {
+        EdgeInsets(:final double right) => right,
+        EdgeInsetsDirectional(:final double end) => end,
+        _ => 0.0,
+      };
+
+  // ///
+  // double get bottom => switch (this) {
+  //       EdgeInsets(:final double bottom) => bottom,
+  //       EdgeInsetsDirectional(:final double bottom) => bottom,
+  //       _ => 0.0,
+  //     };
 }

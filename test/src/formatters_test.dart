@@ -190,9 +190,9 @@ void main() {
       'Dd Mm,YyyyTHh mM Ss': (DateTime(2023, 12, 14), '14 12,2023 00 00 00'),
 
       // Invalid
-      'ra/da/da': (DateTime(0001, 01, 01), ''),
-      'dds/yydd/mmdd': (DateTime(0001, 01, 01), ''),
-      'da12/ds25/dsds125': (DateTime(0001, 01, 01), ''),
+      'ra/da/da': (DateTime(0001), ''),
+      'dds/yydd/mmdd': (DateTime(0001), ''),
+      'da12/ds25/dsds125': (DateTime(0001), ''),
     };
 
     test('Convert DateTime to string', () {
